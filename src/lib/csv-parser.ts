@@ -1,7 +1,7 @@
 /**
  * Bank CSV Parser & Column Mapper
  * Handles quoted values, currency symbols, parentheses for negative amounts,
- * single Amount column or split Debit/Credit (Money Out/Money In) columns.
+ * single Amount column OR split Money Out / Money In (Debit / Credit) columns.
  */
 
 export interface ParsedCsvPreview {
@@ -11,7 +11,10 @@ export interface ParsedCsvPreview {
     dateIndex: number;
     descriptionIndex: number;
     amountIndex: number;
+    moneyOutIndex: number;
+    moneyInIndex: number;
     payeeIndex: number;
+    isSplitAmount: boolean;
   };
 }
 
@@ -56,7 +59,10 @@ export function parseCsvTextToPreview(csvText: string): ParsedCsvPreview {
         dateIndex: 0,
         descriptionIndex: 1,
         amountIndex: 2,
+        moneyOutIndex: -1,
+        moneyInIndex: -1,
         payeeIndex: -1,
+        isSplitAmount: false,
       },
     };
   }
@@ -79,15 +85,30 @@ export function parseCsvTextToPreview(csvText: string): ParsedCsvPreview {
         h.includes("details")
     )
   );
-  const amountIndex = Math.max(
-    0,
-    lowerHeaders.findIndex(
-      (h) => h.includes("amount") || h.includes("total") || h.includes("value")
-    )
+  const amountIndex = lowerHeaders.findIndex(
+    (h) => h.includes("amount") || h.includes("total") || h.includes("value")
+  );
+  const moneyOutIndex = lowerHeaders.findIndex(
+    (h) =>
+      h.includes("money out") ||
+      h.includes("debit") ||
+      h.includes("withdrawal") ||
+      h.includes("spent")
+  );
+  const moneyInIndex = lowerHeaders.findIndex(
+    (h) =>
+      h.includes("money in") ||
+      h.includes("credit") ||
+      h.includes("deposit") ||
+      h.includes("received")
   );
   const payeeIndex = lowerHeaders.findIndex(
-    (h) => h.includes("payee") || h.includes("vendor") || h.includes("merchant")
+    (h) =>
+      h.includes("payee") || h.includes("vendor") || h.includes("merchant")
   );
+
+  const isSplitAmount =
+    amountIndex === -1 && moneyOutIndex !== -1 && moneyInIndex !== -1;
 
   return {
     headers,
@@ -95,8 +116,11 @@ export function parseCsvTextToPreview(csvText: string): ParsedCsvPreview {
     suggestedMapping: {
       dateIndex,
       descriptionIndex: descriptionIndex === dateIndex ? 1 : descriptionIndex,
-      amountIndex: amountIndex === dateIndex ? 2 : amountIndex,
+      amountIndex: amountIndex >= 0 ? amountIndex : 2,
+      moneyOutIndex,
+      moneyInIndex,
       payeeIndex,
+      isSplitAmount,
     },
   };
 }
@@ -130,6 +154,36 @@ export function parseCurrencyStringToCents(raw: string): number {
 
   const totalCents = wholeInt * 100 + fracInt;
   return isNegative ? -totalCents : totalCents;
+}
+
+export function computeRowAmountCents(
+  row: string[],
+  mapping: {
+    amountIndex: number;
+    moneyOutIndex?: number;
+    moneyInIndex?: number;
+    isSplitAmount?: boolean;
+  }
+): number {
+  if (
+    mapping.isSplitAmount &&
+    mapping.moneyOutIndex !== undefined &&
+    mapping.moneyOutIndex >= 0 &&
+    mapping.moneyInIndex !== undefined &&
+    mapping.moneyInIndex >= 0
+  ) {
+    const outCents = Math.abs(
+      parseCurrencyStringToCents(row[mapping.moneyOutIndex] ?? "")
+    );
+    const inCents = Math.abs(
+      parseCurrencyStringToCents(row[mapping.moneyInIndex] ?? "")
+    );
+    if (outCents > 0) return -outCents;
+    if (inCents > 0) return inCents;
+    return 0;
+  }
+
+  return parseCurrencyStringToCents(row[mapping.amountIndex] ?? "0");
 }
 
 export function normalizeDateString(raw: string): string {

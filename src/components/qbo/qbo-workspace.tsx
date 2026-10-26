@@ -2,12 +2,11 @@
 
 import React, { useState } from "react";
 import {
-  Bell,
   BookOpenCheck,
   CheckCircle2,
   FileSpreadsheet,
   FileText,
-  HelpCircle,
+  History,
   Landmark,
   LayoutDashboard,
   Lock,
@@ -16,13 +15,13 @@ import {
   RotateCcw,
   Scale,
   ScrollText,
-  Search,
   Settings,
   Upload,
 } from "lucide-react";
 import type { ComputedQboState } from "@/lib/qbo-store";
 import { QboModals, type ActiveModalType } from "./qbo-modals";
 import {
+  AuditLogView,
   BankingCenterView,
   ChartOfAccountsView,
   DashboardHomeView,
@@ -104,7 +103,8 @@ export function QboWorkspace({
     { id: "coa", label: "Chart of Accounts", icon: ScrollText },
     { id: "journals", label: "Journal Entries", icon: Scale },
     { id: "reports", label: "Reports Center", icon: FileSpreadsheet },
-    { id: "reconcile", label: "Reconcile", icon: Lock },
+    { id: "reconcile", label: "Reconcile & Lock", icon: Lock },
+    { id: "audit", label: "Audit Log", icon: History },
   ];
 
   return (
@@ -239,8 +239,8 @@ export function QboWorkspace({
             <div className="h-5 w-px bg-slate-200 mx-1" />
 
             <button
-              onClick={() => setActiveTab("coa")}
-              title="Chart of Accounts & Settings"
+              onClick={() => setActiveTab("audit")}
+              title="Audit Log & Settings"
               className="rounded-full p-1.5 text-slate-500 hover:bg-slate-100"
             >
               <Settings className="h-4 w-4" />
@@ -340,6 +340,15 @@ export function QboWorkspace({
           )}
           {activeTab === "reconcile" && (
             <ReconcileView
+              state={state}
+              setActiveTab={setActiveTab}
+              setActiveModal={setActiveModal}
+              runAction={runAction}
+              isSubmitting={isSubmitting}
+            />
+          )}
+          {activeTab === "audit" && (
+            <AuditLogView
               state={state}
               setActiveTab={setActiveTab}
               setActiveModal={setActiveModal}

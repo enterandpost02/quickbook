@@ -2,11 +2,14 @@
 
 import React, { useState } from "react";
 import {
-  ArrowUpRight,
+  ArrowLeftRight,
   CheckCircle2,
+  ClipboardList,
+  Download,
   FileSpreadsheet,
   FileText,
   Landmark,
+  Package,
   Plus,
   Receipt,
   Scale,
@@ -18,11 +21,12 @@ import {
 import type { AccountType, ComputedQboState } from "@/lib/qbo-store";
 import { formatCents, parseDollarsToCents } from "@/lib/money";
 import {
+  computeRowAmountCents,
   normalizeDateString,
   parseCsvTextToPreview,
-  parseCurrencyStringToCents,
   type ParsedCsvPreview,
 } from "@/lib/csv-parser";
+import { BANK_CSV_PRESETS } from "@/lib/sample-bank-csvs";
 
 export type ActiveModalType =
   | null
@@ -30,6 +34,9 @@ export type ActiveModalType =
   | "csv_import"
   | "journal_entry"
   | "invoice"
+  | "estimate"
+  | "product_service"
+  | "transfer"
   | "expense"
   | "bill"
   | "account";
@@ -38,7 +45,11 @@ interface ModalsProps {
   activeModal: ActiveModalType;
   setActiveModal: (modal: ActiveModalType) => void;
   state: ComputedQboState;
-  runAction: (action: string, payload?: unknown, successMsg?: string) => Promise<void>;
+  runAction: (
+    action: string,
+    payload?: unknown,
+    successMsg?: string
+  ) => Promise<void>;
   isSubmitting: boolean;
 }
 
@@ -83,6 +94,30 @@ export function QboModals({
           isSubmitting={isSubmitting}
         />
       )}
+      {activeModal === "estimate" && (
+        <CreateEstimateModal
+          state={state}
+          onClose={() => setActiveModal(null)}
+          runAction={runAction}
+          isSubmitting={isSubmitting}
+        />
+      )}
+      {activeModal === "product_service" && (
+        <CreateProductServiceModal
+          state={state}
+          onClose={() => setActiveModal(null)}
+          runAction={runAction}
+          isSubmitting={isSubmitting}
+        />
+      )}
+      {activeModal === "transfer" && (
+        <CreateTransferModal
+          state={state}
+          onClose={() => setActiveModal(null)}
+          runAction={runAction}
+          isSubmitting={isSubmitting}
+        />
+      )}
       {(activeModal === "expense" || activeModal === "bill") && (
         <CreateExpenseModal
           initialType={activeModal === "bill" ? "Bill" : "Expense"}
@@ -104,7 +139,7 @@ export function QboModals({
 }
 
 // ============================================================================
-// 1. QuickBooks "+ New" 4-Column Quick Create Modal
+// 1. QuickBooks "+ New" 3-Column Quick Create Modal
 // ============================================================================
 
 function QuickCreateMenuModal({
@@ -147,6 +182,20 @@ function QuickCreateMenuModal({
               <FileText className="h-4 w-4 text-[#2CA01C]" />
               Invoice
             </button>
+            <button
+              onClick={() => onSelect("estimate")}
+              className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-emerald-50 hover:text-[#2CA01C]"
+            >
+              <ClipboardList className="h-4 w-4 text-[#2CA01C]" />
+              Estimate / Quote
+            </button>
+            <button
+              onClick={() => onSelect("product_service")}
+              className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-emerald-50 hover:text-[#2CA01C]"
+            >
+              <Package className="h-4 w-4 text-[#2CA01C]" />
+              Product / Service Item
+            </button>
           </div>
         </div>
 
@@ -161,7 +210,7 @@ function QuickCreateMenuModal({
               className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-emerald-50 hover:text-[#2CA01C]"
             >
               <Receipt className="h-4 w-4 text-[#2CA01C]" />
-              Expense
+              Expense (Cash / Card)
             </button>
             <button
               onClick={() => onSelect("bill")}
@@ -187,6 +236,13 @@ function QuickCreateMenuModal({
               Journal Entry
             </button>
             <button
+              onClick={() => onSelect("transfer")}
+              className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-emerald-50 hover:text-[#2CA01C]"
+            >
+              <ArrowLeftRight className="h-4 w-4 text-[#2CA01C]" />
+              Bank Transfer
+            </button>
+            <button
               onClick={() => onSelect("csv_import")}
               className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-emerald-50 hover:text-[#2CA01C]"
             >
@@ -208,7 +264,7 @@ function QuickCreateMenuModal({
 }
 
 // ============================================================================
-// 2. Bank CSV Upload & Column Mapping Modal
+// 2. Bank CSV Upload & Multi-Bank Column Mapping Modal
 // ============================================================================
 
 function CsvImportModal({
@@ -219,7 +275,11 @@ function CsvImportModal({
 }: {
   state: ComputedQboState;
   onClose: () => void;
-  runAction: (action: string, payload?: unknown, successMsg?: string) => Promise<void>;
+  runAction: (
+    action: string,
+    payload?: unknown,
+    successMsg?: string
+  ) => Promise<void>;
   isSubmitting: boolean;
 }) {
   const bankAccounts = state.accounts.filter(
@@ -233,6 +293,9 @@ function CsvImportModal({
   const [dateIdx, setDateIdx] = useState(0);
   const [descIdx, setDescIdx] = useState(1);
   const [amountIdx, setAmountIdx] = useState(2);
+  const [moneyOutIdx, setMoneyOutIdx] = useState(-1);
+  const [moneyInIdx, setMoneyInIdx] = useState(-1);
+  const [isSplitAmount, setIsSplitAmount] = useState(false);
   const [payeeIdx, setPayeeIdx] = useState(-1);
   const [error, setError] = useState<string | null>(null);
 
@@ -245,6 +308,9 @@ function CsvImportModal({
       setDateIdx(parsed.suggestedMapping.dateIndex);
       setDescIdx(parsed.suggestedMapping.descriptionIndex);
       setAmountIdx(parsed.suggestedMapping.amountIndex);
+      setMoneyOutIdx(parsed.suggestedMapping.moneyOutIndex);
+      setMoneyInIdx(parsed.suggestedMapping.moneyInIndex);
+      setIsSplitAmount(parsed.suggestedMapping.isSplitAmount);
       setPayeeIdx(parsed.suggestedMapping.payeeIndex);
     } else {
       setPreview(null);
@@ -262,10 +328,21 @@ function CsvImportModal({
     reader.readAsText(file);
   }
 
+  function downloadSampleCsv(presetId: string) {
+    const preset =
+      BANK_CSV_PRESETS.find((p) => p.id === presetId) ?? BANK_CSV_PRESETS[0];
+    const blob = new Blob([preset.csvContent], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${preset.id}-statement.csv`;
+    a.click();
+  }
+
   async function handleImportSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!preview || preview.rawRows.length === 0) {
-      setError("Please upload a CSV file or load the sample CSV first.");
+      setError("Please upload a CSV file or select one of the 4 bank presets.");
       return;
     }
 
@@ -273,13 +350,20 @@ function CsvImportModal({
       .map((r) => ({
         date: normalizeDateString(r[dateIdx] ?? ""),
         description: (r[descIdx] ?? "").trim(),
-        amountCents: parseCurrencyStringToCents(r[amountIdx] ?? "0"),
+        amountCents: computeRowAmountCents(r, {
+          amountIndex: amountIdx,
+          moneyOutIndex: moneyOutIdx,
+          moneyInIndex: moneyInIdx,
+          isSplitAmount,
+        }),
         payee: payeeIdx >= 0 ? (r[payeeIdx] ?? "").trim() : undefined,
       }))
       .filter((r) => r.description && r.amountCents !== 0);
 
     if (mappedRows.length === 0) {
-      setError("No valid non-zero transactions found with the selected column mapping.");
+      setError(
+        "No valid non-zero transactions found with the selected column mapping."
+      );
       return;
     }
 
@@ -304,7 +388,7 @@ function CsvImportModal({
               Upload Bank Statement CSV into QuickBooks
             </h2>
             <p className="text-xs text-slate-300">
-              Map columns, detect duplicates automatically, and run categorization rules
+              Supports single Amount or split Money Out/Money In columns, duplicate detection, and auto-rules
             </p>
           </div>
         </div>
@@ -316,7 +400,10 @@ function CsvImportModal({
         </button>
       </div>
 
-      <form onSubmit={handleImportSubmit} className="p-6 space-y-5 max-h-[82vh] overflow-y-auto">
+      <form
+        onSubmit={handleImportSubmit}
+        className="p-6 space-y-5 max-h-[84vh] overflow-y-auto"
+      >
         {error && (
           <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-700">
             {error}
@@ -326,7 +413,7 @@ function CsvImportModal({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-semibold uppercase text-slate-600 mb-1.5">
-              1. Select Bank or Credit Card Account
+              1. Target QuickBooks Account
             </label>
             <select
               value={bankAccountId}
@@ -341,11 +428,14 @@ function CsvImportModal({
             </select>
           </div>
 
-          <div className="flex flex-col justify-end">
+          <div>
+            <label className="block text-xs font-semibold uppercase text-slate-600 mb-1.5">
+              Upload .CSV from Computer
+            </label>
             <div className="flex items-center gap-2">
-              <label className="flex-1 cursor-pointer inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100">
-                <Upload className="h-4 w-4 text-[#2CA01C]" />
-                <span>Choose .CSV File</span>
+              <label className="flex-1 cursor-pointer inline-flex items-center justify-center gap-2 rounded-lg border border-dashed border-[#2CA01C] bg-emerald-50/50 px-3 py-2 text-xs font-bold text-[#2CA01C] hover:bg-emerald-50">
+                <Upload className="h-4 w-4" />
+                <span>Select .CSV File from Disk</span>
                 <input
                   type="file"
                   accept=".csv,text/csv"
@@ -355,34 +445,78 @@ function CsvImportModal({
               </label>
               <button
                 type="button"
-                onClick={() => handleTextChange(state.sampleCsvText)}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2 text-sm font-semibold text-[#2CA01C] hover:bg-emerald-100"
+                onClick={() => downloadSampleCsv("chase-checking")}
+                title="Download sample .csv file to test uploading from your computer"
+                className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
               >
-                <Sparkles className="h-4 w-4" />
-                Load Sample Bank CSV
+                <Download className="h-3.5 w-3.5" />
+                Sample .CSV
               </button>
             </div>
           </div>
         </div>
 
+        {/* 4 Real Bank Format Presets */}
         <div>
           <label className="block text-xs font-semibold uppercase text-slate-600 mb-1.5">
-            2. Or Paste / Edit Raw CSV Data
+            2. Or Test One of 4 Real Bank Export Formats Instantly
+          </label>
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
+            {BANK_CSV_PRESETS.map((preset) => (
+              <button
+                key={preset.id}
+                type="button"
+                onClick={() => {
+                  setBankAccountId(preset.defaultAccountId);
+                  handleTextChange(preset.csvContent);
+                }}
+                className="text-left rounded-lg border border-slate-200 bg-slate-50 p-2.5 hover:border-[#2CA01C] hover:bg-emerald-50/40 transition-colors"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-900">
+                    {preset.bankName}
+                  </span>
+                  <Sparkles className="h-3 w-3 text-[#2CA01C]" />
+                </div>
+                <p className="text-[10px] text-slate-500 mt-0.5 line-clamp-2">
+                  {preset.formatDescription}
+                </p>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
+            Raw CSV Content
           </label>
           <textarea
             rows={4}
             value={csvText}
             onChange={(e) => handleTextChange(e.target.value)}
-            placeholder="Date,Description,Amount,Payee&#10;2026-10-20,HOME DEPOT SPRINKLERS,-248.50,Home Depot"
+            placeholder="Click a bank preset above or choose a .CSV file from your computer..."
             className="w-full rounded-lg border border-slate-300 font-mono text-xs p-3 text-slate-800 focus:border-[#2CA01C] focus:outline-none"
           />
         </div>
 
         {preview && preview.headers.length > 0 && (
           <div className="space-y-4 rounded-xl border border-slate-200 bg-[#F4F5F8] p-4">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-              3. Map CSV Columns ({preview.rawRows.length} rows detected)
-            </h3>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                3. Column Mapping &amp; Live Preview ({preview.rawRows.length}{" "}
+                rows)
+              </h3>
+              <label className="inline-flex items-center gap-2 text-xs font-medium text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={isSplitAmount}
+                  onChange={(e) => setIsSplitAmount(e.target.checked)}
+                  className="accent-[#2CA01C]"
+                />
+                Split Money Out / Money In columns (e.g. Bank of America)
+              </label>
+            </div>
+
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div>
                 <label className="block text-xs font-medium text-slate-600 mb-1">
@@ -418,26 +552,63 @@ function CsvImportModal({
                 </select>
               </div>
 
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">
-                  Amount Column
-                </label>
-                <select
-                  value={amountIdx}
-                  onChange={(e) => setAmountIdx(Number(e.target.value))}
-                  className="w-full rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs"
-                >
-                  {preview.headers.map((h, i) => (
-                    <option key={i} value={i}>
-                      {h || `Column ${i + 1}`}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {!isSplitAmount ? (
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">
+                    Amount Column
+                  </label>
+                  <select
+                    value={amountIdx}
+                    onChange={(e) => setAmountIdx(Number(e.target.value))}
+                    className="w-full rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs"
+                  >
+                    {preview.headers.map((h, i) => (
+                      <option key={i} value={i}>
+                        {h || `Column ${i + 1}`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-1.5">
+                  <div>
+                    <label className="block text-[10px] font-medium text-slate-600 mb-1">
+                      Money Out
+                    </label>
+                    <select
+                      value={moneyOutIdx}
+                      onChange={(e) => setMoneyOutIdx(Number(e.target.value))}
+                      className="w-full rounded border border-slate-300 bg-white px-1.5 py-1.5 text-xs"
+                    >
+                      {preview.headers.map((h, i) => (
+                        <option key={i} value={i}>
+                          {h}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-medium text-slate-600 mb-1">
+                      Money In
+                    </label>
+                    <select
+                      value={moneyInIdx}
+                      onChange={(e) => setMoneyInIdx(Number(e.target.value))}
+                      className="w-full rounded border border-slate-300 bg-white px-1.5 py-1.5 text-xs"
+                    >
+                      {preview.headers.map((h, i) => (
+                        <option key={i} value={i}>
+                          {h}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label className="block text-xs font-medium text-slate-600 mb-1">
-                  Payee Column (Optional)
+                  Payee Column
                 </label>
                 <select
                   value={payeeIdx}
@@ -458,17 +629,22 @@ function CsvImportModal({
               <table className="w-full text-left text-xs">
                 <thead className="bg-slate-50 border-b border-slate-200 text-slate-500">
                   <tr>
-                    <th className="px-3 py-2">Date</th>
+                    <th className="px-3 py-2">Normalized Date</th>
                     <th className="px-3 py-2">Description</th>
                     <th className="px-3 py-2">Payee</th>
-                    <th className="px-3 py-2 text-right">Parsed Amount</th>
+                    <th className="px-3 py-2 text-right">
+                      Amount (Integer Cents)
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {preview.rawRows.slice(0, 6).map((row, idx) => {
-                    const cents = parseCurrencyStringToCents(
-                      row[amountIdx] ?? "0"
-                    );
+                  {preview.rawRows.slice(0, 7).map((row, idx) => {
+                    const cents = computeRowAmountCents(row, {
+                      amountIndex: amountIdx,
+                      moneyOutIndex: moneyOutIdx,
+                      moneyInIndex: moneyInIdx,
+                      isSplitAmount,
+                    });
                     return (
                       <tr key={idx}>
                         <td className="px-3 py-1.5 font-mono text-slate-600">
@@ -478,14 +654,17 @@ function CsvImportModal({
                           {row[descIdx]}
                         </td>
                         <td className="px-3 py-1.5 text-slate-600">
-                          {payeeIdx >= 0 ? row[payeeIdx] : "Auto"}
+                          {payeeIdx >= 0 ? row[payeeIdx] : "Rule Auto"}
                         </td>
                         <td
                           className={`px-3 py-1.5 text-right font-mono font-semibold ${
                             cents >= 0 ? "text-[#2CA01C]" : "text-slate-900"
                           }`}
                         >
-                          {formatCents(cents)}
+                          {formatCents(cents)}{" "}
+                          <span className="text-[10px] text-slate-400">
+                            ({cents}¢)
+                          </span>
                         </td>
                       </tr>
                     );
@@ -529,7 +708,11 @@ function JournalEntryModal({
 }: {
   state: ComputedQboState;
   onClose: () => void;
-  runAction: (action: string, payload?: unknown, successMsg?: string) => Promise<void>;
+  runAction: (
+    action: string,
+    payload?: unknown,
+    successMsg?: string
+  ) => Promise<void>;
   isSubmitting: boolean;
 }) {
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
@@ -618,7 +801,10 @@ function JournalEntryModal({
         </button>
       </div>
 
-      <form onSubmit={handleSubmit} className="p-6 space-y-5 max-h-[82vh] overflow-y-auto">
+      <form
+        onSubmit={handleSubmit}
+        className="p-6 space-y-5 max-h-[82vh] overflow-y-auto"
+      >
         {error && (
           <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-700">
             {error}
@@ -761,7 +947,10 @@ function JournalEntryModal({
             </tbody>
             <tfoot className="bg-[#F4F5F8] font-bold border-t border-slate-300">
               <tr>
-                <td colSpan={2} className="px-3 py-2.5 text-right uppercase text-slate-600">
+                <td
+                  colSpan={2}
+                  className="px-3 py-2.5 text-right uppercase text-slate-600"
+                >
                   Total
                 </td>
                 <td className="px-3 py-2.5 text-right font-mono text-slate-900">
@@ -830,7 +1019,7 @@ function JournalEntryModal({
 }
 
 // ============================================================================
-// 4. Create Customer Invoice Modal
+// 4. Create Customer Invoice Modal (with Product/Service Catalog selector)
 // ============================================================================
 
 function CreateInvoiceModal({
@@ -841,7 +1030,11 @@ function CreateInvoiceModal({
 }: {
   state: ComputedQboState;
   onClose: () => void;
-  runAction: (action: string, payload?: unknown, successMsg?: string) => Promise<void>;
+  runAction: (
+    action: string,
+    payload?: unknown,
+    successMsg?: string
+  ) => Promise<void>;
   isSubmitting: boolean;
 }) {
   const incomeAccounts = state.accounts.filter((a) => a.type === "Income");
@@ -850,13 +1043,18 @@ function CreateInvoiceModal({
   );
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [dueDate, setDueDate] = useState("2026-11-25");
+  const firstCatalog = state.productsAndServices[0];
   const [lines, setLines] = useState([
     {
-      serviceName: "Landscape Design & Installation",
-      description: "Backyard patio pavers & drought-tolerant planting",
+      serviceName:
+        firstCatalog?.name ?? "Landscape Design & Installation",
+      description:
+        firstCatalog?.description ??
+        "Backyard patio pavers & drought-tolerant planting",
       quantity: 1,
-      rateDollars: "1250.00",
-      incomeAccountId: incomeAccounts[0]?.id ?? "acc-4010",
+      rateDollars: ((firstCatalog?.rateCents ?? 125000) / 100).toFixed(2),
+      incomeAccountId:
+        firstCatalog?.incomeAccountId ?? incomeAccounts[0]?.id ?? "acc-4010",
     },
   ]);
 
@@ -988,17 +1186,31 @@ function CreateInvoiceModal({
                 return (
                   <tr key={i}>
                     <td className="px-3 py-2">
-                      <input
-                        type="text"
+                      <select
                         value={line.serviceName}
                         onChange={(e) => {
+                          const selected = state.productsAndServices.find(
+                            (p) => p.name === e.target.value
+                          );
                           const next = [...lines];
                           next[i].serviceName = e.target.value;
+                          if (selected) {
+                            next[i].description = selected.description;
+                            next[i].rateDollars = (
+                              selected.rateCents / 100
+                            ).toFixed(2);
+                            next[i].incomeAccountId = selected.incomeAccountId;
+                          }
                           setLines(next);
                         }}
-                        required
-                        className="w-full rounded border border-slate-300 px-2 py-1.5 text-xs font-medium"
-                      />
+                        className="w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-xs font-medium"
+                      >
+                        {state.productsAndServices.map((p) => (
+                          <option key={p.id} value={p.name}>
+                            {p.name} ({formatCents(p.rateCents)})
+                          </option>
+                        ))}
+                      </select>
                     </td>
                     <td className="px-3 py-2">
                       <input
@@ -1071,8 +1283,12 @@ function CreateInvoiceModal({
               setLines([
                 ...lines,
                 {
-                  serviceName: "Sprinkler Heads & Fittings",
-                  description: "Additional zone installation",
+                  serviceName:
+                    state.productsAndServices[1]?.name ??
+                    "Pond & Irrigation Installation",
+                  description:
+                    state.productsAndServices[1]?.description ??
+                    "Additional zone installation",
                   quantity: 1,
                   rateDollars: "350.00",
                   incomeAccountId: incomeAccounts[0]?.id ?? "acc-4010",
@@ -1107,7 +1323,534 @@ function CreateInvoiceModal({
 }
 
 // ============================================================================
-// 5. Create Expense or Vendor Bill Modal
+// 5. Create Estimate / Quote Modal
+// ============================================================================
+
+function CreateEstimateModal({
+  state,
+  onClose,
+  runAction,
+  isSubmitting,
+}: {
+  state: ComputedQboState;
+  onClose: () => void;
+  runAction: (
+    action: string,
+    payload?: unknown,
+    successMsg?: string
+  ) => Promise<void>;
+  isSubmitting: boolean;
+}) {
+  const incomeAccounts = state.accounts.filter((a) => a.type === "Income");
+  const [customerId, setCustomerId] = useState(
+    state.customers[0]?.id ?? "cust-1"
+  );
+  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [expirationDate, setExpirationDate] = useState("2026-11-30");
+  const [serviceName, setServiceName] = useState(
+    state.productsAndServices[0]?.name ?? "Landscape Architecture Design"
+  );
+  const [description, setDescription] = useState(
+    "Complete front & backyard landscaping proposal"
+  );
+  const [rateDollars, setRateDollars] = useState("2850.00");
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    let cents = 0;
+    try {
+      cents = parseDollarsToCents(rateDollars);
+    } catch {
+      return;
+    }
+    if (cents <= 0) return;
+
+    await runAction(
+      "create_estimate",
+      {
+        customerId,
+        date,
+        expirationDate,
+        lines: [
+          {
+            serviceName,
+            description,
+            quantity: 1,
+            rateCents: cents,
+            incomeAccountId: incomeAccounts[0]?.id ?? "acc-4010",
+          },
+        ],
+      },
+      `Created Estimate for ${formatCents(cents)}`
+    );
+    onClose();
+  }
+
+  return (
+    <div className="w-full max-w-2xl rounded-xl bg-white shadow-2xl border border-slate-200 overflow-hidden">
+      <div className="flex items-center justify-between px-6 py-4 bg-[#1E252B] text-white">
+        <div className="flex items-center gap-2">
+          <ClipboardList className="h-5 w-5 text-[#2CA01C]" />
+          <h2 className="text-base font-bold">
+            New Customer Estimate / Quote (EST-{2001 + state.estimates.length})
+          </h2>
+        </div>
+        <button
+          onClick={onClose}
+          className="rounded-lg p-1.5 text-slate-300 hover:bg-slate-700"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div>
+            <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
+              Customer
+            </label>
+            <select
+              value={customerId}
+              onChange={(e) => setCustomerId(e.target.value)}
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+            >
+              {state.customers.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
+              Estimate Date
+            </label>
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
+              Expiration Date
+            </label>
+            <input
+              type="date"
+              value={expirationDate}
+              onChange={(e) => setExpirationDate(e.target.value)}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="sm:col-span-2">
+            <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
+              Product / Service
+            </label>
+            <input
+              type="text"
+              value={serviceName}
+              onChange={(e) => setServiceName(e.target.value)}
+              required
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
+              Quoted Amount ($)
+            </label>
+            <input
+              type="text"
+              value={rateDollars}
+              onChange={(e) => setRateDollars(e.target.value)}
+              required
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right font-mono text-sm font-bold"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
+            Scope of Work / Description
+          </label>
+          <input
+            type="text"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            required
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          />
+        </div>
+
+        <div className="flex justify-end gap-3 pt-3 border-t border-slate-200">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full border border-slate-300 px-5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="rounded-full bg-[#2CA01C] px-6 py-2 text-sm font-semibold text-white hover:bg-[#248217]"
+          >
+            Save Estimate
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+// ============================================================================
+// 6. Create Product / Service Catalog Item Modal
+// ============================================================================
+
+function CreateProductServiceModal({
+  state,
+  onClose,
+  runAction,
+  isSubmitting,
+}: {
+  state: ComputedQboState;
+  onClose: () => void;
+  runAction: (
+    action: string,
+    payload?: unknown,
+    successMsg?: string
+  ) => Promise<void>;
+  isSubmitting: boolean;
+}) {
+  const incomeAccounts = state.accounts.filter((a) => a.type === "Income");
+  const [name, setName] = useState("Seasonal Tree Pruning & Mulching");
+  const [sku, setSku] = useState("MNT-350");
+  const [type, setType] = useState<"Service" | "Non-Inventory" | "Inventory">(
+    "Service"
+  );
+  const [description, setDescription] = useState(
+    "Canopy thinning, deadwood removal & organic bark mulch"
+  );
+  const [rateDollars, setRateDollars] = useState("450.00");
+  const [incomeAccountId, setIncomeAccountId] = useState(
+    incomeAccounts[0]?.id ?? "acc-4010"
+  );
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    let rateCents = 0;
+    try {
+      rateCents = parseDollarsToCents(rateDollars);
+    } catch {
+      return;
+    }
+    await runAction(
+      "create_product_service",
+      {
+        name,
+        sku,
+        type,
+        description,
+        rateCents,
+        incomeAccountId,
+      },
+      `Added "${name}" to Products & Services catalog`
+    );
+    onClose();
+  }
+
+  return (
+    <div className="w-full max-w-lg rounded-xl bg-white shadow-2xl border border-slate-200 overflow-hidden">
+      <div className="flex items-center justify-between px-6 py-4 bg-[#1E252B] text-white">
+        <div className="flex items-center gap-2">
+          <Package className="h-5 w-5 text-[#2CA01C]" />
+          <h2 className="text-base font-bold">
+            New Product / Service Item
+          </h2>
+        </div>
+        <button
+          onClick={onClose}
+          className="rounded-lg p-1.5 text-slate-300 hover:bg-slate-700"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <div className="grid grid-cols-3 gap-3">
+          <div className="col-span-2">
+            <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
+              Item Name
+            </label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
+              SKU
+            </label>
+            <input
+              type="text"
+              value={sku}
+              onChange={(e) => setSku(e.target.value)}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-sm"
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-3">
+          <div>
+            <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
+              Type
+            </label>
+            <select
+              value={type}
+              onChange={(e) =>
+                setType(
+                  e.target.value as "Service" | "Non-Inventory" | "Inventory"
+                )
+              }
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+            >
+              <option value="Service">Service</option>
+              <option value="Non-Inventory">Non-Inventory</option>
+              <option value="Inventory">Inventory</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
+              Sales Price / Rate ($)
+            </label>
+            <input
+              type="text"
+              value={rateDollars}
+              onChange={(e) => setRateDollars(e.target.value)}
+              required
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right font-mono text-sm font-bold"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
+              Income Account
+            </label>
+            <select
+              value={incomeAccountId}
+              onChange={(e) => setIncomeAccountId(e.target.value)}
+              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+            >
+              {incomeAccounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.code} — {a.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
+            Description on Sales Forms
+          </label>
+          <input
+            type="text"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          />
+        </div>
+
+        <div className="flex justify-end gap-3 pt-3 border-t border-slate-200">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full border border-slate-300 px-5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="rounded-full bg-[#2CA01C] px-6 py-2 text-sm font-semibold text-white hover:bg-[#248217]"
+          >
+            Save Item
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+// ============================================================================
+// 7. Bank Transfer Modal
+// ============================================================================
+
+function CreateTransferModal({
+  state,
+  onClose,
+  runAction,
+  isSubmitting,
+}: {
+  state: ComputedQboState;
+  onClose: () => void;
+  runAction: (
+    action: string,
+    payload?: unknown,
+    successMsg?: string
+  ) => Promise<void>;
+  isSubmitting: boolean;
+}) {
+  const bankAccounts = state.accounts.filter(
+    (a) => a.type === "Bank" || a.type === "Credit Card"
+  );
+  const [fromAccountId, setFromAccountId] = useState("acc-1000");
+  const [toAccountId, setToAccountId] = useState("acc-1010");
+  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [amountDollars, setAmountDollars] = useState("1000.00");
+  const [memo, setMemo] = useState("Monthly transfer to Business Savings reserve");
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    let amountCents = 0;
+    try {
+      amountCents = parseDollarsToCents(amountDollars);
+    } catch {
+      return;
+    }
+    if (amountCents <= 0) return;
+
+    await runAction(
+      "create_transfer",
+      {
+        fromAccountId,
+        toAccountId,
+        date,
+        amountCents,
+        memo,
+      },
+      `Transferred ${formatCents(amountCents)} between accounts`
+    );
+    onClose();
+  }
+
+  return (
+    <div className="w-full max-w-lg rounded-xl bg-white shadow-2xl border border-slate-200 overflow-hidden">
+      <div className="flex items-center justify-between px-6 py-4 bg-[#1E252B] text-white">
+        <div className="flex items-center gap-2">
+          <ArrowLeftRight className="h-5 w-5 text-[#2CA01C]" />
+          <h2 className="text-base font-bold">Transfer Funds Between Accounts</h2>
+        </div>
+        <button
+          onClick={onClose}
+          className="rounded-lg p-1.5 text-slate-300 hover:bg-slate-700"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <div>
+          <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
+            Transfer Funds From
+          </label>
+          <select
+            value={fromAccountId}
+            onChange={(e) => setFromAccountId(e.target.value)}
+            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+          >
+            {bankAccounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.code} — {a.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
+            Transfer Funds To
+          </label>
+          <select
+            value={toAccountId}
+            onChange={(e) => setToAccountId(e.target.value)}
+            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+          >
+            {bankAccounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.code} — {a.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
+              Date
+            </label>
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
+              Transfer Amount ($)
+            </label>
+            <input
+              type="text"
+              value={amountDollars}
+              onChange={(e) => setAmountDollars(e.target.value)}
+              required
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-right font-mono text-sm font-bold"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
+            Memo
+          </label>
+          <input
+            type="text"
+            value={memo}
+            onChange={(e) => setMemo(e.target.value)}
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          />
+        </div>
+
+        <div className="flex justify-end gap-3 pt-3 border-t border-slate-200">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full border border-slate-300 px-5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={isSubmitting || fromAccountId === toAccountId}
+            className="rounded-full bg-[#2CA01C] px-6 py-2 text-sm font-semibold text-white hover:bg-[#248217] disabled:opacity-50"
+          >
+            Save Transfer
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+// ============================================================================
+// 8. Create Expense or Vendor Bill Modal
 // ============================================================================
 
 function CreateExpenseModal({
@@ -1120,7 +1863,11 @@ function CreateExpenseModal({
   initialType: "Expense" | "Bill";
   state: ComputedQboState;
   onClose: () => void;
-  runAction: (action: string, payload?: unknown, successMsg?: string) => Promise<void>;
+  runAction: (
+    action: string,
+    payload?: unknown,
+    successMsg?: string
+  ) => Promise<void>;
   isSubmitting: boolean;
 }) {
   const [type, setType] = useState<"Expense" | "Bill">(initialType);
@@ -1347,7 +2094,7 @@ function CreateExpenseModal({
 }
 
 // ============================================================================
-// 6. Create Chart of Accounts Item Modal
+// 9. Create Chart of Accounts Item Modal
 // ============================================================================
 
 function CreateAccountModal({
@@ -1356,7 +2103,11 @@ function CreateAccountModal({
   isSubmitting,
 }: {
   onClose: () => void;
-  runAction: (action: string, payload?: unknown, successMsg?: string) => Promise<void>;
+  runAction: (
+    action: string,
+    payload?: unknown,
+    successMsg?: string
+  ) => Promise<void>;
   isSubmitting: boolean;
 }) {
   const [code, setCode] = useState("6150");

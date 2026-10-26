@@ -2,27 +2,26 @@
 
 import React, { useState } from "react";
 import {
-  ArrowDownRight,
-  ArrowUpRight,
-  Building2,
   Check,
   CheckCircle2,
+  ClipboardList,
   CreditCard,
   Download,
   FileSpreadsheet,
   FileText,
-  Filter,
+  History,
   Landmark,
   Lock,
+  Package,
   Plus,
   Receipt,
   RotateCcw,
   Scale,
   Search,
+  ShieldAlert,
   Sparkles,
-  TrendingUp,
+  Unlock,
   Upload,
-  Users,
 } from "lucide-react";
 import type { ComputedQboState } from "@/lib/qbo-store";
 import { formatCents, parseDollarsToCents } from "@/lib/money";
@@ -36,7 +35,8 @@ export type QboNavTab =
   | "coa"
   | "journals"
   | "reports"
-  | "reconcile";
+  | "reconcile"
+  | "audit";
 
 interface ViewProps {
   state: ComputedQboState;
@@ -99,6 +99,12 @@ export function DashboardHomeView({
           <p className="text-xs text-slate-500">
             All figures computed live in integer cents from{" "}
             {state.journalEntries.length} balanced journal entries.
+            {state.lockedThroughDate && (
+              <span className="ml-2 inline-flex items-center gap-1 rounded bg-slate-100 px-2 py-0.5 font-mono text-[11px] font-semibold text-slate-700">
+                <Lock className="h-3 w-3 text-amber-600" />
+                Books closed through {state.lockedThroughDate}
+              </span>
+            )}
           </p>
         </div>
 
@@ -134,7 +140,7 @@ export function DashboardHomeView({
         </div>
       </div>
 
-      {/* Main QBO 2x2 Widget Grid */}
+      {/* Main QBO 3-Card Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Card 1: Profit and Loss Widget */}
         <div className="rounded-xl bg-white p-5 border border-slate-200 shadow-2xs flex flex-col justify-between">
@@ -384,7 +390,7 @@ export function DashboardHomeView({
               onClick={() => setActiveTab("sales")}
               className="text-xs font-semibold text-[#0077C5] hover:underline"
             >
-              View all invoices
+              View all invoices &amp; estimates
             </button>
           </div>
 
@@ -552,13 +558,11 @@ export function BankingCenterView({
     "for_review" | "categorized" | "excluded" | "rules"
   >("for_review");
 
-  // Local overrides for category dropdown per row
   const [selectedCategoryByTx, setSelectedCategoryByTx] = useState<
     Record<string, string>
   >({});
   const [payeeByTx, setPayeeByTx] = useState<Record<string, string>>({});
 
-  // New Rule state
   const [ruleName, setRuleName] = useState("");
   const [ruleContains, setRuleContains] = useState("");
   const [ruleDirection, setRuleDirection] = useState<"out" | "in" | "any">(
@@ -585,7 +589,7 @@ export function BankingCenterView({
             Bank Transactions &amp; CSV Feed
           </h1>
           <p className="text-xs text-slate-500">
-            Upload bank CSV files, review auto-categorized rules, and post to the General Ledger
+            Upload bank CSV files (Chase, BofA, Amex, Wells Fargo), review auto-categorized rules, and post to the General Ledger
           </p>
         </div>
 
@@ -823,7 +827,9 @@ export function BankingCenterView({
                         ({r.direction})
                       </td>
                       <td className="px-4 py-3 font-medium text-[#2CA01C]">
-                        {target ? `${target.code} — ${target.name}` : r.targetAccountId}
+                        {target
+                          ? `${target.code} — ${target.name}`
+                          : r.targetAccountId}
                       </td>
                     </tr>
                   );
@@ -997,7 +1003,7 @@ export function BankingCenterView({
 }
 
 // ============================================================================
-// 3. SALES, INVOICES & CUSTOMERS VIEW
+// 3. SALES, INVOICES, ESTIMATES, CUSTOMERS & PRODUCTS/SERVICES VIEW
 // ============================================================================
 
 export function SalesAndInvoicesView({
@@ -1005,35 +1011,62 @@ export function SalesAndInvoicesView({
   setActiveModal,
   runAction,
 }: ViewProps) {
-  const [subTab, setSubTab] = useState<"invoices" | "customers">("invoices");
+  const [subTab, setSubTab] = useState<
+    "invoices" | "estimates" | "customers" | "products"
+  >("invoices");
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold text-slate-900">
-            Sales, Invoices &amp; Customers
+            Sales, Invoices, Estimates &amp; Catalog
           </h1>
           <p className="text-xs text-slate-500">
-            Track open receivables, create invoices, and receive customer payments
+            Create estimates, convert quotes to invoices, receive payments, and manage Products &amp; Services
           </p>
         </div>
-        <button
-          onClick={() => setActiveModal("invoice")}
-          className="inline-flex items-center gap-1.5 rounded-full bg-[#2CA01C] px-5 py-2 text-xs font-semibold text-white hover:bg-[#248217]"
-        >
-          <Plus className="h-3.5 w-3.5" />
-          Create Invoice
-        </button>
+        <div className="flex items-center gap-2.5">
+          <button
+            onClick={() => setActiveModal("product_service")}
+            className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            <Package className="h-3.5 w-3.5 text-[#2CA01C]" />
+            + Product / Service
+          </button>
+          <button
+            onClick={() => setActiveModal("estimate")}
+            className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            <ClipboardList className="h-3.5 w-3.5 text-[#2CA01C]" />
+            + New Estimate
+          </button>
+          <button
+            onClick={() => setActiveModal("invoice")}
+            className="inline-flex items-center gap-1.5 rounded-full bg-[#2CA01C] px-5 py-2 text-xs font-semibold text-white hover:bg-[#248217]"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Create Invoice
+          </button>
+        </div>
       </div>
 
       {/* QuickBooks Money Bar */}
       <div className="rounded-xl bg-white p-5 border border-slate-200 shadow-2xs">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-3">
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-6 mb-3">
+          <div>
+            <span className="text-xs font-bold uppercase text-indigo-600">
+              {state.estimates.filter((e) => e.status !== "Converted").length}{" "}
+              Open Estimates
+            </span>
+            <p className="text-2xl font-mono font-bold text-slate-900 mt-0.5">
+              {formatCents(state.kpis.openEstimatesCents)}
+            </p>
+          </div>
           <div>
             <span className="text-xs font-bold uppercase text-amber-600">
               {state.invoices.filter((i) => i.status === "Overdue").length}{" "}
-              Overdue
+              Overdue Invoices
             </span>
             <p className="text-2xl font-mono font-bold text-slate-900 mt-0.5">
               {formatCents(state.kpis.overdueInvoicesCents)}
@@ -1059,9 +1092,10 @@ export function SalesAndInvoicesView({
           </div>
         </div>
         <div className="h-3 w-full rounded-full bg-slate-100 flex overflow-hidden">
-          <div className="bg-amber-500 h-full w-1/5" />
-          <div className="bg-sky-500 h-full w-2/5" />
-          <div className="bg-[#2CA01C] h-full w-2/5" />
+          <div className="bg-indigo-500 h-full w-1/4" />
+          <div className="bg-amber-500 h-full w-1/6" />
+          <div className="bg-sky-500 h-full w-1/4" />
+          <div className="bg-[#2CA01C] h-full flex-1" />
         </div>
       </div>
 
@@ -1079,6 +1113,16 @@ export function SalesAndInvoicesView({
             Invoices ({state.invoices.length})
           </button>
           <button
+            onClick={() => setSubTab("estimates")}
+            className={`py-3 text-xs font-bold border-b-2 ${
+              subTab === "estimates"
+                ? "border-[#2CA01C] text-[#2CA01C]"
+                : "border-transparent text-slate-600"
+            }`}
+          >
+            Estimates / Quotes ({state.estimates.length})
+          </button>
+          <button
             onClick={() => setSubTab("customers")}
             className={`py-3 text-xs font-bold border-b-2 ${
               subTab === "customers"
@@ -1088,9 +1132,19 @@ export function SalesAndInvoicesView({
           >
             Customers ({state.customers.length})
           </button>
+          <button
+            onClick={() => setSubTab("products")}
+            className={`py-3 text-xs font-bold border-b-2 ${
+              subTab === "products"
+                ? "border-[#2CA01C] text-[#2CA01C]"
+                : "border-transparent text-slate-600"
+            }`}
+          >
+            Products &amp; Services ({state.productsAndServices.length})
+          </button>
         </div>
 
-        {subTab === "invoices" ? (
+        {subTab === "invoices" && (
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase">
               <tr>
@@ -1164,7 +1218,79 @@ export function SalesAndInvoicesView({
               ))}
             </tbody>
           </table>
-        ) : (
+        )}
+
+        {subTab === "estimates" && (
+          <table className="w-full text-left text-xs">
+            <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase">
+              <tr>
+                <th className="px-4 py-3">Date</th>
+                <th className="px-4 py-3">Estimate #</th>
+                <th className="px-4 py-3">Customer</th>
+                <th className="px-4 py-3">Expires</th>
+                <th className="px-4 py-3 text-right">Amount</th>
+                <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {state.estimates.map((est) => (
+                <tr key={est.id} className="hover:bg-slate-50">
+                  <td className="px-4 py-3 font-mono text-slate-600">
+                    {est.date}
+                  </td>
+                  <td className="px-4 py-3 font-mono font-bold text-slate-900">
+                    {est.estimateNumber}
+                  </td>
+                  <td className="px-4 py-3 font-semibold text-slate-900">
+                    {est.customerName}
+                  </td>
+                  <td className="px-4 py-3 font-mono text-slate-600">
+                    {est.expirationDate}
+                  </td>
+                  <td className="px-4 py-3 text-right font-mono font-bold text-slate-900">
+                    {formatCents(est.totalCents)}
+                  </td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-bold ${
+                        est.status === "Converted"
+                          ? "bg-emerald-100 text-emerald-800"
+                          : est.status === "Accepted"
+                          ? "bg-indigo-100 text-indigo-800"
+                          : "bg-slate-100 text-slate-700"
+                      }`}
+                    >
+                      {est.status}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    {est.status !== "Converted" ? (
+                      <button
+                        onClick={() =>
+                          runAction(
+                            "convert_estimate",
+                            { estimateId: est.id },
+                            `Converted ${est.estimateNumber} to Invoice and posted to A/R!`
+                          )
+                        }
+                        className="rounded-full bg-[#2CA01C] px-3 py-1 text-xs font-bold text-white hover:bg-[#248217]"
+                      >
+                        Convert to Invoice
+                      </button>
+                    ) : (
+                      <span className="text-emerald-700 font-semibold">
+                        ✓ Invoiced
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+
+        {subTab === "customers" && (
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase">
               <tr>
@@ -1194,6 +1320,41 @@ export function SalesAndInvoicesView({
                   </tr>
                 );
               })}
+            </tbody>
+          </table>
+        )}
+
+        {subTab === "products" && (
+          <table className="w-full text-left text-xs">
+            <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase">
+              <tr>
+                <th className="px-4 py-3">SKU</th>
+                <th className="px-4 py-3">Name</th>
+                <th className="px-4 py-3">Type</th>
+                <th className="px-4 py-3">Sales Description</th>
+                <th className="px-4 py-3">Income Account</th>
+                <th className="px-4 py-3 text-right">Sales Price / Rate</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {state.productsAndServices.map((p) => (
+                <tr key={p.id} className="hover:bg-slate-50">
+                  <td className="px-4 py-3 font-mono font-semibold text-slate-600">
+                    {p.sku}
+                  </td>
+                  <td className="px-4 py-3 font-semibold text-slate-900">
+                    {p.name}
+                  </td>
+                  <td className="px-4 py-3 text-slate-600">{p.type}</td>
+                  <td className="px-4 py-3 text-slate-500">{p.description}</td>
+                  <td className="px-4 py-3 text-emerald-700 font-medium">
+                    {p.incomeAccountName}
+                  </td>
+                  <td className="px-4 py-3 text-right font-mono font-bold text-slate-900">
+                    {formatCents(p.rateCents)}
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         )}
@@ -1607,7 +1768,10 @@ export function JournalEntriesView({
                 </tbody>
                 <tfoot className="bg-slate-50/80 border-t border-slate-200 font-mono font-bold text-xs">
                   <tr>
-                    <td colSpan={3} className="px-5 py-2 text-right text-slate-500">
+                    <td
+                      colSpan={3}
+                      className="px-5 py-2 text-right text-slate-500"
+                    >
                       TOTAL
                     </td>
                     <td className="px-5 py-2 text-right text-slate-900">
@@ -1628,16 +1792,25 @@ export function JournalEntriesView({
 }
 
 // ============================================================================
-// 7. REPORTS CENTER (Profit & Loss, Balance Sheet, General Ledger)
+// 7. REPORTS CENTER (P&L, Balance Sheet, Trial Balance, A/R & A/P Aging, GL)
 // ============================================================================
 
 export function ReportsCenterView({ state }: ViewProps) {
-  const [reportTab, setReportTab] = useState<"pnl" | "bs" | "gl">("pnl");
+  const [reportTab, setReportTab] = useState<
+    "pnl" | "bs" | "tb" | "ar_aging" | "ap_aging" | "gl"
+  >("pnl");
   const [basis, setBasis] = useState<"Accrual" | "Cash">("Accrual");
-  const { profitAndLoss, balanceSheet, generalLedger } = state.reports;
+  const {
+    profitAndLoss,
+    balanceSheet,
+    trialBalance,
+    arAging,
+    apAging,
+    generalLedger,
+  } = state.reports;
 
   function exportReportCsv() {
-    let csv = "Section,Account Code,Account Name,Amount\n";
+    let csv = "Section,Code/Entity,Name,Amount\n";
     if (reportTab === "pnl") {
       for (const l of profitAndLoss.incomeLines) {
         csv += `Income,${l.code},"${l.name}",${(l.amountCents / 100).toFixed(2)}\n`;
@@ -1649,6 +1822,13 @@ export function ReportsCenterView({ state }: ViewProps) {
         csv += `Expenses,${l.code},"${l.name}",${(l.amountCents / 100).toFixed(2)}\n`;
       }
       csv += `Net Income,,,"${(profitAndLoss.netIncomeCents / 100).toFixed(2)}"\n`;
+    } else if (reportTab === "tb") {
+      csv = "Account Code,Account Name,Debit,Credit\n";
+      for (const r of trialBalance.rows) {
+        csv += `${r.code},"${r.name}",${(r.debitBalanceCents / 100).toFixed(
+          2
+        )},${(r.creditBalanceCents / 100).toFixed(2)}\n`;
+      }
     } else {
       for (const l of balanceSheet.assetLines) {
         csv += `Assets,${l.code},"${l.name}",${(l.amountCents / 100).toFixed(2)}\n`;
@@ -1672,18 +1852,21 @@ export function ReportsCenterView({ state }: ViewProps) {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-2 bg-white p-1 rounded-full border border-slate-200">
+        <div className="flex flex-wrap items-center gap-1.5 bg-white p-1.5 rounded-xl border border-slate-200">
           {(
             [
-              { id: "pnl", label: "Profit and Loss" },
+              { id: "pnl", label: "Profit & Loss" },
               { id: "bs", label: "Balance Sheet" },
+              { id: "tb", label: "Trial Balance" },
+              { id: "ar_aging", label: "A/R Aging Summary" },
+              { id: "ap_aging", label: "A/P Aging Summary" },
               { id: "gl", label: "General Ledger" },
             ] as const
           ).map((t) => (
             <button
               key={t.id}
               onClick={() => setReportTab(t.id)}
-              className={`rounded-full px-4 py-1.5 text-xs font-bold transition-colors ${
+              className={`rounded-lg px-3.5 py-1.5 text-xs font-bold transition-colors ${
                 reportTab === t.id
                   ? "bg-[#2CA01C] text-white"
                   : "text-slate-600 hover:text-slate-900"
@@ -1696,7 +1879,7 @@ export function ReportsCenterView({ state }: ViewProps) {
 
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1 rounded-lg bg-white border border-slate-200 p-1 text-xs">
-            <span className="px-2 text-slate-400">Accounting method:</span>
+            <span className="px-2 text-slate-400">Basis:</span>
             <button
               onClick={() => setBasis("Accrual")}
               className={`rounded px-2.5 py-1 font-semibold ${
@@ -1735,9 +1918,15 @@ export function ReportsCenterView({ state }: ViewProps) {
           </h2>
           <p className="text-sm font-semibold text-slate-700 mt-0.5">
             {reportTab === "pnl"
-              ? "Profit and Loss"
+              ? "Profit and Loss Statement"
               : reportTab === "bs"
               ? "Balance Sheet"
+              : reportTab === "tb"
+              ? "Trial Balance"
+              : reportTab === "ar_aging"
+              ? "Accounts Receivable Aging Summary"
+              : reportTab === "ap_aging"
+              ? "Accounts Payable Aging Summary"
               : "General Ledger"}
           </p>
           <p className="text-xs text-slate-400 mt-0.5">
@@ -1937,6 +2126,120 @@ export function ReportsCenterView({ state }: ViewProps) {
           </div>
         )}
 
+        {reportTab === "tb" && (
+          <table className="w-full text-left text-xs">
+            <thead className="border-b-2 border-slate-800 text-slate-600 uppercase">
+              <tr>
+                <th className="py-2">Account</th>
+                <th className="py-2">Type</th>
+                <th className="py-2 text-right">Debit</th>
+                <th className="py-2 text-right">Credit</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {trialBalance.rows.map((r) => (
+                <tr key={r.accountId}>
+                  <td className="py-2 font-medium text-slate-900">
+                    <span className="font-mono text-slate-500 mr-2">
+                      {r.code}
+                    </span>
+                    {r.name}
+                  </td>
+                  <td className="py-2 text-slate-500">{r.type}</td>
+                  <td className="py-2 text-right font-mono">
+                    {r.debitBalanceCents > 0
+                      ? formatCents(r.debitBalanceCents)
+                      : ""}
+                  </td>
+                  <td className="py-2 text-right font-mono">
+                    {r.creditBalanceCents > 0
+                      ? formatCents(r.creditBalanceCents)
+                      : ""}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot className="border-t-2 border-b-4 border-double border-slate-900 font-bold text-sm">
+              <tr>
+                <td colSpan={2} className="py-3">
+                  TOTAL{" "}
+                  {trialBalance.isBalanced && (
+                    <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] text-[#2CA01C]">
+                      ✓ Debits = Credits
+                    </span>
+                  )}
+                </td>
+                <td className="py-3 text-right font-mono">
+                  {formatCents(trialBalance.totalDebitsCents)}
+                </td>
+                <td className="py-3 text-right font-mono">
+                  {formatCents(trialBalance.totalCreditsCents)}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        )}
+
+        {(reportTab === "ar_aging" || reportTab === "ap_aging") && (
+          <table className="w-full text-left text-xs">
+            <thead className="border-b-2 border-slate-800 text-slate-600 uppercase">
+              <tr>
+                <th className="py-2">
+                  {reportTab === "ar_aging" ? "Customer" : "Vendor"}
+                </th>
+                <th className="py-2 text-right">Current</th>
+                <th className="py-2 text-right">1 - 30 Days</th>
+                <th className="py-2 text-right">31 - 60 Days</th>
+                <th className="py-2 text-right">61+ Days</th>
+                <th className="py-2 text-right">Total</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {(reportTab === "ar_aging" ? arAging.rows : apAging.rows).map(
+                (r) => (
+                  <tr key={r.entityId}>
+                    <td className="py-2.5 font-semibold text-slate-900">
+                      {r.entityName}
+                    </td>
+                    <td className="py-2.5 text-right font-mono">
+                      {formatCents(r.currentCents)}
+                    </td>
+                    <td className="py-2.5 text-right font-mono text-amber-700">
+                      {formatCents(r.days1To30Cents)}
+                    </td>
+                    <td className="py-2.5 text-right font-mono text-orange-700">
+                      {formatCents(r.days31To60Cents)}
+                    </td>
+                    <td className="py-2.5 text-right font-mono text-red-700">
+                      {formatCents(r.days61PlusCents)}
+                    </td>
+                    <td className="py-2.5 text-right font-mono font-bold text-slate-900">
+                      {formatCents(r.totalCents)}
+                    </td>
+                  </tr>
+                )
+              )}
+            </tbody>
+            <tfoot className="border-t-2 border-b-4 border-double border-slate-900 font-bold text-sm">
+              <tr>
+                <td colSpan={5} className="py-3">
+                  TOTAL{" "}
+                  {reportTab === "ar_aging"
+                    ? "OPEN RECEIVABLES"
+                    : "OPEN PAYABLES"}
+                </td>
+                <td className="py-3 text-right font-mono text-[#2CA01C]">
+                  {formatCents(
+                    reportTab === "ar_aging"
+                      ? arAging.totalCents
+                      : apAging.totalCents
+                  )}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        )}
+
         {reportTab === "gl" && (
           <div className="space-y-6 text-xs">
             {generalLedger.map((acc) => (
@@ -1998,7 +2301,7 @@ export function ReportsCenterView({ state }: ViewProps) {
 }
 
 // ============================================================================
-// 8. RECONCILE VIEW (Tick Cleared Transactions until Difference = $0.00)
+// 8. RECONCILE & PERIOD LOCK VIEW
 // ============================================================================
 
 export function ReconcileView({ state, runAction, isSubmitting }: ViewProps) {
@@ -2014,6 +2317,9 @@ export function ReconcileView({ state, runAction, isSubmitting }: ViewProps) {
 
   const [statementEndingDollars, setStatementEndingDollars] = useState(
     ((currentBank?.balanceCents ?? 2805000) / 100).toFixed(2)
+  );
+  const [lockDateInput, setLockDateInput] = useState(
+    state.lockedThroughDate ?? "2026-09-30"
   );
 
   // Find all journal entries that touch this bank account
@@ -2059,10 +2365,10 @@ export function ReconcileView({ state, runAction, isSubmitting }: ViewProps) {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold text-slate-900">
-            Reconcile {currentBank?.name}
+            Reconcile &amp; Close the Books
           </h1>
           <p className="text-xs text-slate-500">
-            Match your bank statement ending balance against cleared QuickBooks transactions until Difference is $0.00
+            Match your bank statement ending balance until Difference is $0.00, and lock closed accounting periods
           </p>
         </div>
 
@@ -2085,6 +2391,66 @@ export function ReconcileView({ state, runAction, isSubmitting }: ViewProps) {
           <CheckCircle2 className="h-4 w-4" />
           Finish Reconciliation Now
         </button>
+      </div>
+
+      {/* Period Lock (Close the Books) Card */}
+      <div className="rounded-xl bg-white p-5 border border-slate-200 shadow-2xs flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-start gap-3">
+          <div className="rounded-lg bg-amber-100 p-2 text-amber-800">
+            <Lock className="h-5 w-5" />
+          </div>
+          <div>
+            <h2 className="text-sm font-bold text-slate-900">
+              Close the Books (Period Lock)
+            </h2>
+            <p className="text-xs text-slate-500">
+              Prevent accidental edits or backdated journal entries on or before the closing date.
+              Currently:{" "}
+              <strong className="font-mono text-slate-900">
+                {state.lockedThroughDate
+                  ? `Locked through ${state.lockedThroughDate}`
+                  : "Unlocked"}
+              </strong>
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <input
+            type="date"
+            value={lockDateInput}
+            onChange={(e) => setLockDateInput(e.target.value)}
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-mono"
+          />
+          <button
+            onClick={() =>
+              runAction(
+                "set_period_lock",
+                { lockedThroughDate: lockDateInput },
+                `Locked accounting period through ${lockDateInput}`
+              )
+            }
+            className="inline-flex items-center gap-1 rounded-full bg-slate-900 px-4 py-1.5 text-xs font-semibold text-white hover:bg-slate-800"
+          >
+            <Lock className="h-3 w-3" />
+            Set Lock Date
+          </button>
+          {state.lockedThroughDate && (
+            <button
+              onClick={() =>
+                runAction(
+                  "set_period_lock",
+                  { lockedThroughDate: null },
+                  "Unlocked closed period"
+                )
+              }
+              className="inline-flex items-center gap-1 rounded-full border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100"
+            >
+              <Unlock className="h-3 w-3" />
+              Unlock
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Reconciliation Math Banner */}
@@ -2185,6 +2551,105 @@ export function ReconcileView({ state, runAction, isSubmitting }: ViewProps) {
                 </td>
                 <td className="px-4 py-3 text-right font-mono font-semibold text-[#2CA01C]">
                   {item.netCents >= 0 ? formatCents(item.netCents) : ""}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Reconciliation History */}
+      <div className="rounded-xl bg-white border border-slate-200 shadow-2xs overflow-hidden">
+        <div className="px-5 py-3 bg-[#F4F5F8] border-b border-slate-200">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600">
+            History by Account ({state.reconciliations.length})
+          </h3>
+        </div>
+        <table className="w-full text-left text-xs">
+          <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase">
+            <tr>
+              <th className="px-4 py-2.5">Account</th>
+              <th className="px-4 py-2.5">Statement Ending Date</th>
+              <th className="px-4 py-2.5">Reconciled On</th>
+              <th className="px-4 py-2.5 text-right">Cleared Items</th>
+              <th className="px-4 py-2.5 text-right">Ending Balance</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {state.reconciliations.map((rec) => (
+              <tr key={rec.id}>
+                <td className="px-4 py-2.5 font-semibold text-slate-900">
+                  {rec.bankAccountName}
+                </td>
+                <td className="px-4 py-2.5 font-mono text-slate-600">
+                  {rec.statementDate}
+                </td>
+                <td className="px-4 py-2.5 font-mono text-slate-500">
+                  {rec.reconciledAt.slice(0, 10)}
+                </td>
+                <td className="px-4 py-2.5 text-right font-mono">
+                  {rec.clearedCount}
+                </td>
+                <td className="px-4 py-2.5 text-right font-mono font-bold text-[#2CA01C]">
+                  {formatCents(rec.endingBalanceCents)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// 9. AUDIT LOG VIEW (Phase 7 — Immutable Activity & Trust Trail)
+// ============================================================================
+
+export function AuditLogView({ state }: ViewProps) {
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-slate-900">
+            Audit Log ({state.auditLogs.length} events)
+          </h1>
+          <p className="text-xs text-slate-500">
+            Complete chronological audit trail of who did what across manual entries, CSV imports, and period locks
+          </p>
+        </div>
+      </div>
+
+      <div className="rounded-xl bg-white border border-slate-200 shadow-2xs overflow-hidden">
+        <table className="w-full text-left text-xs">
+          <thead className="bg-[#F4F5F8] border-b border-slate-200 text-slate-600 uppercase">
+            <tr>
+              <th className="px-4 py-3">Date / Time</th>
+              <th className="px-4 py-3">User</th>
+              <th className="px-4 py-3">Event</th>
+              <th className="px-4 py-3">Details</th>
+              <th className="px-4 py-3 text-right">Amount</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {state.auditLogs.map((log) => (
+              <tr key={log.id} className="hover:bg-slate-50">
+                <td className="px-4 py-3 font-mono text-slate-500 whitespace-nowrap">
+                  {log.timestamp.replace("T", " ").slice(0, 19)}
+                </td>
+                <td className="px-4 py-3 font-semibold text-slate-900">
+                  {log.user}
+                </td>
+                <td className="px-4 py-3">
+                  <span className="inline-flex rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 text-[11px] font-bold text-[#2CA01C]">
+                    {log.action}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-slate-700">{log.details}</td>
+                <td className="px-4 py-3 text-right font-mono font-bold text-slate-900">
+                  {log.amountCents !== undefined
+                    ? formatCents(log.amountCents)
+                    : "—"}
                 </td>
               </tr>
             ))}

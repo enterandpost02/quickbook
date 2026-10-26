@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
 import {
   categorizeBankTransaction,
+  convertEstimateToInvoice,
   createAccount,
+  createEstimate,
   createExpenseOrBill,
   createInvoice,
+  createProductService,
   createRule,
+  createTransfer,
   excludeBankTransaction,
   finishReconciliation,
   getComputedQboState,
@@ -15,6 +19,7 @@ import {
   receiveInvoicePayment,
   resetQboStore,
   reverseJournalEntry,
+  setPeriodLockDate,
 } from "@/lib/qbo-store";
 
 export async function GET() {
@@ -70,6 +75,26 @@ export async function POST(request: Request) {
       }
       case "create_invoice": {
         createInvoice(payload);
+        break;
+      }
+      case "create_estimate": {
+        createEstimate(payload);
+        break;
+      }
+      case "convert_estimate": {
+        convertEstimateToInvoice(payload.estimateId);
+        break;
+      }
+      case "create_product_service": {
+        createProductService(payload);
+        break;
+      }
+      case "create_transfer": {
+        createTransfer(payload);
+        break;
+      }
+      case "set_period_lock": {
+        setPeriodLockDate(payload.lockedThroughDate ?? null);
         break;
       }
       case "receive_invoice_payment": {

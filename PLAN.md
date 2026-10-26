@@ -18,7 +18,7 @@ A launchable QuickBooks-like app takes about 3–4 months for one developer with
 
 **AI tip:** Ask the AI to write the tests first: balanced entries pass, unbalanced ones fail, reversals zero out. Read every line of this code yourself, because everything else depends on it.
 
-- [ ] Done when: tests pass and you can manually create journal entries in a simple form.
+- [x] Done when: tests pass and you can manually create journal entries in a simple form.
 
 ## Phase 2 — Bank import + categorization (1–2 weeks)
 
@@ -28,7 +28,7 @@ This is the most-used feature in QuickBooks.
 
 **AI tip:** Collect 3–4 real CSV exports from different banks and give them to the AI as test files. Formats vary more than you'd expect.
 
-- [ ] Done when: you can import a month of real bank data and categorize all of it.
+- [x] Done when: you can import a month of real bank data and categorize all of it.
 
 ## Phase 3 — Reports (1 week)
 
@@ -36,7 +36,7 @@ This is the most-used feature in QuickBooks.
 
 **AI tip:** Give the AI a small set of transactions with correct totals you worked out by hand, and have it build the reports to match. Never trust report numbers you haven't checked yourself.
 
-- [ ] Done when: the balance sheet always balances, and the P&L matches your manual math.
+- [x] Done when: the balance sheet always balances, and the P&L matches your manual math.
 
 **Milestone: usable bookkeeping MVP.** Get 3–5 real users (freelancers or small shops) testing it now.
 
@@ -44,25 +44,25 @@ This is the most-used feature in QuickBooks.
 
 **Build:** a reconcile screen (enter the statement ending balance, tick cleared transactions until the difference is $0.00), a reconciliation history, and locking of closed periods.
 
-- [ ] Done when: you can reconcile a real month and can't accidentally change a locked month.
+- [x] Done when: you can reconcile a real month and can't accidentally change a locked month.
 
 ## Phase 5 — Customers + invoicing (2 weeks)
 
 **Build:** customers, products/services, invoices and estimates, PDF and email sending, recording payments received (with Undeposited Funds), an A/R aging report, and matching deposits from bank imports to invoices.
 
-- [ ] Done when: you can send an invoice, record payment and see it flow into the reports.
+- [x] Done when: you can send an invoice, record payment and see it flow into the reports.
 
 ## Phase 6 — Vendors, expenses + bills (1–2 weeks)
 
 **Build:** vendors, expenses with receipt upload, bills and bill payments, an A/P aging report, and sales tax rates.
 
-- [ ] Done when: you can track what the business owes and has paid.
+- [x] Done when: you can track what the business owes and has paid.
 
 ## Phase 7 — Teams + trust (1 week)
 
 **Build:** multiple users with roles (owner, staff, accountant), an audit log of who did what, recurring invoices, a settings page and full data export.
 
-- [ ] Done when: an accountant can be invited and can see everything without being able to delete it.
+- [x] Done when: an accountant can be invited and can see everything without being able to delete it.
 
 ## Phase 8 — Automation + your edge (2–3 weeks)
 

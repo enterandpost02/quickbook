@@ -1,0 +1,168 @@
+import { describe, it, beforeEach } from "node:test";
+import assert from "node:assert/strict";
+import {
+  categorizeBankTransaction,
+  convertEstimateToInvoice,
+  createTransfer,
+  getComputedQboState,
+  importBankCsvRows,
+  postJournalEntry,
+  resetQboStore,
+  reverseJournalEntry,
+  setPeriodLockDate,
+} from "../qbo-store";
+import {
+  computeRowAmountCents,
+  normalizeDateString,
+  parseCsvTextToPreview,
+} from "../csv-parser";
+import { BANK_CSV_PRESETS } from "../sample-bank-csvs";
+
+describe("QuickBooks Double-Entry Accounting Engine & CSV Suite", () => {
+  beforeEach(() => {
+    resetQboStore();
+  });
+
+  it("1. Initial sample company Balance Sheet and Trial Balance are 100% balanced", () => {
+    const state = getComputedQboState();
+    assert.equal(state.reports.balanceSheet.isBalanced, true);
+    assert.equal(
+      state.reports.balanceSheet.totalAssetsCents,
+      state.reports.balanceSheet.totalLiabilitiesAndEquityCents
+    );
+    assert.equal(state.reports.trialBalance.isBalanced, true);
+    assert.equal(
+      state.reports.trialBalance.totalDebitsCents,
+      state.reports.trialBalance.totalCreditsCents
+    );
+  });
+
+  it("2. Balanced manual journal entry passes and updates account balances in integer cents", () => {
+    const before = getComputedQboState();
+    const checkingBefore =
+      before.accountsWithBalances.find((a) => a.id === "acc-1000")
+        ?.balanceCents ?? 0;
+
+    postJournalEntry({
+      date: "2026-10-25",
+      memo: "Owner cash injection",
+      lines: [
+        { accountId: "acc-1000", debitCents: 12550, creditCents: 0 },
+        { accountId: "acc-3100", debitCents: 0, creditCents: 12550 },
+      ],
+    });
+
+    const after = getComputedQboState();
+    const checkingAfter =
+      after.accountsWithBalances.find((a) => a.id === "acc-1000")
+        ?.balanceCents ?? 0;
+    assert.equal(checkingAfter - checkingBefore, 12550);
+    assert.equal(after.reports.balanceSheet.isBalanced, true);
+  });
+
+  it("3. Unbalanced journal entry is rejected", () => {
+    assert.throws(() => {
+      postJournalEntry({
+        date: "2026-10-25",
+        memo: "Unbalanced entry",
+        lines: [
+          { accountId: "acc-1000", debitCents: 50000, creditCents: 0 },
+          { accountId: "acc-4000", debitCents: 0, creditCents: 49999 },
+        ],
+      });
+    }, /out of balance/);
+  });
+
+  it("4. Reversal entry swaps debits/credits and zeroes out net account effect", () => {
+    const initial = getComputedQboState();
+    const initialNetIncome = initial.reports.profitAndLoss.netIncomeCents;
+
+    const entry = postJournalEntry({
+      date: "2026-10-26",
+      memo: "Accrued advertising expense",
+      lines: [
+        { accountId: "acc-6010", debitCents: 75000, creditCents: 0 },
+        { accountId: "acc-1000", debitCents: 0, creditCents: 75000 },
+      ],
+    });
+
+    const mid = getComputedQboState();
+    assert.equal(
+      mid.reports.profitAndLoss.netIncomeCents,
+      initialNetIncome - 75000
+    );
+
+    reverseJournalEntry(entry.id, "2026-10-27");
+
+    const finalState = getComputedQboState();
+    assert.equal(
+      finalState.reports.profitAndLoss.netIncomeCents,
+      initialNetIncome
+    );
+    assert.equal(finalState.reports.balanceSheet.isBalanced, true);
+  });
+
+  it("5. Period lock (Close the Books) blocks postings on or before lockedThroughDate", () => {
+    setPeriodLockDate("2026-09-30");
+    assert.throws(() => {
+      postJournalEntry({
+        date: "2026-09-15",
+        memo: "Backdated entry in closed period",
+        lines: [
+          { accountId: "acc-6010", debitCents: 10000, creditCents: 0 },
+          { accountId: "acc-1000", debitCents: 0, creditCents: 10000 },
+        ],
+      });
+    }, /Books are closed through 2026-09-30/);
+  });
+
+  it("6. Parses all 4 multi-bank CSV formats (Chase, BofA split columns, Amex parens, Wells Fargo quotes) and detects duplicates", () => {
+    for (const preset of BANK_CSV_PRESETS) {
+      const preview = parseCsvTextToPreview(preset.csvContent);
+      assert.ok(
+        preview.rawRows.length >= 3,
+        `Expected rows for ${preset.bankName}`
+      );
+
+      const mappedRows = preview.rawRows.map((r) => ({
+        date: normalizeDateString(r[preview.suggestedMapping.dateIndex] ?? ""),
+        description: (r[preview.suggestedMapping.descriptionIndex] ?? "").trim(),
+        amountCents: computeRowAmountCents(r, preview.suggestedMapping),
+      }));
+
+      const firstImport = importBankCsvRows({
+        bankAccountId: preset.defaultAccountId,
+        rows: mappedRows,
+      });
+      assert.equal(firstImport.importedCount, mappedRows.length);
+      assert.equal(firstImport.duplicateCount, 0);
+
+      // Re-importing the exact same CSV should detect 100% duplicates
+      const secondImport = importBankCsvRows({
+        bankAccountId: preset.defaultAccountId,
+        rows: mappedRows,
+      });
+      assert.equal(secondImport.importedCount, 0);
+      assert.equal(secondImport.duplicateCount, mappedRows.length);
+    }
+  });
+
+  it("7. Categorizing bank feed items, converting estimates, and transferring funds keep Balance Sheet balanced", () => {
+    categorizeBankTransaction({
+      transactionId: "btx-1",
+      categoryAccountId: "acc-5010",
+      payee: "Hicks Hardware",
+    });
+    convertEstimateToInvoice("est-2001");
+    createTransfer({
+      fromAccountId: "acc-1000",
+      toAccountId: "acc-1010",
+      date: "2026-10-26",
+      amountCents: 200000,
+    });
+
+    const state = getComputedQboState();
+    assert.equal(state.reports.balanceSheet.isBalanced, true);
+    assert.equal(state.reports.trialBalance.isBalanced, true);
+  });
+});

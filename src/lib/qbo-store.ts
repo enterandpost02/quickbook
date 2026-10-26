@@ -6,6 +6,7 @@
  * 2. Every posted financial event creates a balanced double-entry JournalEntry
  *    where SUM(debitCents) === SUM(creditCents).
  * 3. Posted journal entries are never edited or deleted; corrections use reversal entries.
+ * 4. Period Lock (Close the Books) blocks any posting on or before lockedThroughDate.
  */
 
 export type AccountType =
@@ -59,6 +60,7 @@ export interface QboJournalEntry {
     | "expense"
     | "bill"
     | "bill_payment"
+    | "transfer"
     | "opening_balance"
     | "reversal";
   sourceId?: string;
@@ -107,6 +109,37 @@ export interface QboVendor {
   email: string;
   phone: string;
   defaultExpenseAccountId: string;
+}
+
+export interface QboProductService {
+  id: string;
+  name: string;
+  sku: string;
+  type: "Service" | "Non-Inventory" | "Inventory";
+  description: string;
+  rateCents: number;
+  incomeAccountId: string;
+  incomeAccountName: string;
+}
+
+export interface QboEstimate {
+  id: string;
+  estimateNumber: string;
+  customerId: string;
+  customerName: string;
+  date: string;
+  expirationDate: string;
+  status: "Pending" | "Accepted" | "Converted";
+  totalCents: number;
+  convertedInvoiceId?: string;
+  lines: Array<{
+    serviceName: string;
+    description: string;
+    quantity: number;
+    rateCents: number;
+    amountCents: number;
+    incomeAccountId: string;
+  }>;
 }
 
 export interface QboInvoiceLine {
@@ -162,17 +195,30 @@ export interface QboReconciliationRecord {
   reconciledAt: string;
 }
 
+export interface QboAuditLogItem {
+  id: string;
+  timestamp: string;
+  user: string;
+  action: string;
+  details: string;
+  amountCents?: number;
+}
+
 export interface QboStoreData {
   companyName: string;
+  lockedThroughDate: string | null;
   accounts: QboAccount[];
   journalEntries: QboJournalEntry[];
   bankTransactions: QboBankTransaction[];
   rules: QboCategorizationRule[];
   customers: QboCustomer[];
   vendors: QboVendor[];
+  productsAndServices: QboProductService[];
+  estimates: QboEstimate[];
   invoices: QboInvoice[];
   expenses: QboExpense[];
   reconciliations: QboReconciliationRecord[];
+  auditLogs: QboAuditLogItem[];
 }
 
 export const SAMPLE_BANK_CSV = `Date,Description,Amount,Payee
@@ -572,6 +618,112 @@ function createInitialSeedData(): QboStoreData {
     },
   ];
 
+  const productsAndServices: QboProductService[] = [
+    {
+      id: "prod-1",
+      name: "Landscape Architecture Design",
+      sku: "DES-100",
+      type: "Service",
+      description: "Custom CAD site plan, native plant blueprint & irrigation layout",
+      rateCents: 12500,
+      incomeAccountId: "acc-4000",
+      incomeAccountName: "Design Services Income",
+    },
+    {
+      id: "prod-2",
+      name: "Pond & Irrigation Installation",
+      sku: "LND-200",
+      type: "Service",
+      description: "Full water feature excavation, liner, pump & multi-zone drip irrigation",
+      rateCents: 360000,
+      incomeAccountId: "acc-4010",
+      incomeAccountName: "Landscaping & Installation Income",
+    },
+    {
+      id: "prod-3",
+      name: "Commercial Turf & Sprinklers",
+      sku: "LND-210",
+      type: "Service",
+      description: "Commercial storefront sod installation & smart Wi-Fi controller",
+      rateCents: 342000,
+      incomeAccountId: "acc-4010",
+      incomeAccountName: "Landscaping & Installation Income",
+    },
+    {
+      id: "prod-4",
+      name: "Coastal Grounds & Pest Control",
+      sku: "MNT-300",
+      type: "Service",
+      description: "Monthly palm pruning, salt-tolerant bed care & organic pest treatment",
+      rateCents: 168000,
+      incomeAccountId: "acc-4020",
+      incomeAccountName: "Pest Control & Maintenance Income",
+    },
+    {
+      id: "prod-5",
+      name: "Pop-Up Sprinkler Heads & Brass Nozzles",
+      sku: "MAT-401",
+      type: "Non-Inventory",
+      description: "Commercial grade 4-inch rotary sprinkler heads",
+      rateCents: 4500,
+      incomeAccountId: "acc-4010",
+      incomeAccountName: "Landscaping & Installation Income",
+    },
+    {
+      id: "prod-6",
+      name: "Drought-Tolerant Patio Redesign",
+      sku: "DES-150",
+      type: "Service",
+      description: "Flagstone walkway, decomposed granite & succulent garden",
+      rateCents: 245000,
+      incomeAccountId: "acc-4010",
+      incomeAccountName: "Landscaping & Installation Income",
+    },
+  ];
+
+  const estimates: QboEstimate[] = [
+    {
+      id: "est-2001",
+      estimateNumber: "EST-2001",
+      customerId: "cust-4",
+      customerName: "Geeta Kalapatapu",
+      date: "2026-10-14",
+      expirationDate: "2026-11-14",
+      status: "Accepted",
+      totalCents: 245000,
+      lines: [
+        {
+          serviceName: "Drought-Tolerant Patio Redesign",
+          description: "Flagstone walkway, decomposed granite & succulent garden",
+          quantity: 1,
+          rateCents: 245000,
+          amountCents: 245000,
+          incomeAccountId: "acc-4010",
+        },
+      ],
+    },
+    {
+      id: "est-2002",
+      estimateNumber: "EST-2002",
+      customerId: "cust-5",
+      customerName: "Jeff's Jalopies",
+      date: "2026-10-19",
+      expirationDate: "2026-11-19",
+      status: "Pending",
+      totalCents: 189000,
+      lines: [
+        {
+          serviceName: "Commercial Lot Perimeter Landscaping",
+          description: "Showroom frontage planters & automatic drip system",
+          quantity: 1,
+          rateCents: 189000,
+          amountCents: 189000,
+          incomeAccountId: "acc-4010",
+        },
+      ],
+    },
+  ];
+
   const rules: QboCategorizationRule[] = [
     {
       id: "rule-1",
@@ -620,6 +772,14 @@ function createInitialSeedData(): QboStoreData {
       direction: "in",
       targetAccountId: "acc-4010",
       payeeName: "Stripe Payout",
+    },
+    {
+      id: "rule-7",
+      name: "Gusto Payroll Runs",
+      containsText: "GUSTO",
+      direction: "out",
+      targetAccountId: "acc-6070",
+      payeeName: "Gusto Payroll",
     },
   ];
 
@@ -1234,17 +1394,56 @@ function createInitialSeedData(): QboStoreData {
     },
   ];
 
+  const auditLogs: QboAuditLogItem[] = [
+    {
+      id: "aud-1",
+      timestamp: "2026-10-14T09:45:00Z",
+      user: "Craig Carlson (Owner)",
+      action: "Expense Recorded",
+      details: "JE-1009 · Brosnahan Insurance Agency (General Liability)",
+      amountCents: 54700,
+    },
+    {
+      id: "aud-2",
+      timestamp: "2026-10-12T15:00:00Z",
+      user: "Craig Carlson (Owner)",
+      action: "Bill Entered",
+      details: "JE-1008 · Norton Lumber and Building Materials (#NL-409)",
+      amountCents: 112000,
+    },
+    {
+      id: "aud-3",
+      timestamp: "2026-10-10T11:00:00Z",
+      user: "Craig Carlson (Owner)",
+      action: "Invoice Created",
+      details: "JE-1004 · Invoice #1002 to Freeman Sporting Goods",
+      amountCents: 342000,
+    },
+    {
+      id: "aud-4",
+      timestamp: "2026-10-05T14:15:00Z",
+      user: "Craig Carlson (Owner)",
+      action: "Invoice Payment Received",
+      details: "JE-1003 · Payment for Invoice #1001 (Amy's Bird Sanctuary)",
+      amountCents: 485000,
+    },
+  ];
+
   return {
     companyName: "Craig's Design and Landscaping Services",
+    lockedThroughDate: "2026-08-31",
     accounts,
     journalEntries,
     bankTransactions,
     rules,
     customers,
     vendors,
+    productsAndServices,
+    estimates,
     invoices,
     expenses,
     reconciliations,
+    auditLogs,
   };
 }
 
@@ -1264,6 +1463,22 @@ export function getRawStore(): QboStoreData {
 export function resetQboStore(): QboStoreData {
   globalStore.__qboStoreData = createInitialSeedData();
   return globalStore.__qboStoreData;
+}
+
+function appendAuditLog(
+  action: string,
+  details: string,
+  amountCents?: number
+): void {
+  const store = getRawStore();
+  store.auditLogs.unshift({
+    id: `aud-${Date.now()}-${store.auditLogs.length}`,
+    timestamp: new Date().toISOString(),
+    user: "Craig Carlson (Owner)",
+    action,
+    details,
+    amountCents,
+  });
 }
 
 function matchRuleForTransaction(
@@ -1294,6 +1509,16 @@ export interface ComputedAccount extends QboAccount {
   forReviewCount: number;
 }
 
+export interface AgingRow {
+  entityId: string;
+  entityName: string;
+  currentCents: number;
+  days1To30Cents: number;
+  days31To60Cents: number;
+  days61PlusCents: number;
+  totalCents: number;
+}
+
 export interface ComputedQboState extends QboStoreData {
   accountsWithBalances: ComputedAccount[];
   sampleCsvText: string;
@@ -1318,6 +1543,27 @@ export interface ComputedQboState extends QboStoreData {
       totalEquityCents: number;
       totalLiabilitiesAndEquityCents: number;
       isBalanced: boolean;
+    };
+    trialBalance: {
+      rows: Array<{
+        accountId: string;
+        code: string;
+        name: string;
+        type: AccountType;
+        debitBalanceCents: number;
+        creditBalanceCents: number;
+      }>;
+      totalDebitsCents: number;
+      totalCreditsCents: number;
+      isBalanced: boolean;
+    };
+    arAging: {
+      rows: AgingRow[];
+      totalCents: number;
+    };
+    apAging: {
+      rows: AgingRow[];
+      totalCents: number;
     };
     generalLedger: Array<{
       accountId: string;
@@ -1345,8 +1591,15 @@ export interface ComputedQboState extends QboStoreData {
     overdueInvoicesCents: number;
     paidLast30DaysCents: number;
     openBillsCents: number;
+    openEstimatesCents: number;
     forReviewCount: number;
   };
+}
+
+function diffDays(dueDateStr: string, refDateStr = "2026-10-27"): number {
+  const due = new Date(`${dueDateStr}T00:00:00Z`).getTime();
+  const ref = new Date(`${refDateStr}T00:00:00Z`).getTime();
+  return Math.floor((ref - due) / (1000 * 60 * 60 * 24));
 }
 
 export function getComputedQboState(): ComputedQboState {
@@ -1489,6 +1742,81 @@ export function getComputedQboState(): ComputedQboState {
   const totalLiabilitiesAndEquityCents =
     totalLiabilitiesCents + totalEquityCents;
 
+  // Trial Balance Calculation
+  const tbRows = accountsWithBalances
+    .filter((a) => a.debitTotalCents !== a.creditTotalCents)
+    .map((a) => {
+      const netDebit = a.debitTotalCents - a.creditTotalCents;
+      return {
+        accountId: a.id,
+        code: a.code,
+        name: a.name,
+        type: a.type,
+        debitBalanceCents: netDebit > 0 ? netDebit : 0,
+        creditBalanceCents: netDebit < 0 ? Math.abs(netDebit) : 0,
+      };
+    });
+  const tbTotalDebits = tbRows.reduce((s, r) => s + r.debitBalanceCents, 0);
+  const tbTotalCredits = tbRows.reduce((s, r) => s + r.creditBalanceCents, 0);
+
+  // A/R Aging Summary Calculation
+  const arMap = new Map<string, AgingRow>();
+  for (const inv of store.invoices) {
+    if (inv.status === "Paid" || inv.balanceDueCents <= 0) continue;
+    const row = arMap.get(inv.customerId) ?? {
+      entityId: inv.customerId,
+      entityName: inv.customerName,
+      currentCents: 0,
+      days1To30Cents: 0,
+      days31To60Cents: 0,
+      days61PlusCents: 0,
+      totalCents: 0,
+    };
+    const daysPastDue = diffDays(inv.dueDate);
+    if (daysPastDue <= 0) {
+      row.currentCents += inv.balanceDueCents;
+    } else if (daysPastDue <= 30) {
+      row.days1To30Cents += inv.balanceDueCents;
+    } else if (daysPastDue <= 60) {
+      row.days31To60Cents += inv.balanceDueCents;
+    } else {
+      row.days61PlusCents += inv.balanceDueCents;
+    }
+    row.totalCents += inv.balanceDueCents;
+    arMap.set(inv.customerId, row);
+  }
+  const arRows = Array.from(arMap.values());
+  const arTotalCents = arRows.reduce((s, r) => s + r.totalCents, 0);
+
+  // A/P Aging Summary Calculation
+  const apMap = new Map<string, AgingRow>();
+  for (const bill of store.expenses) {
+    if (bill.type !== "Bill" || bill.status === "Paid") continue;
+    const row = apMap.get(bill.vendorId) ?? {
+      entityId: bill.vendorId,
+      entityName: bill.vendorName,
+      currentCents: 0,
+      days1To30Cents: 0,
+      days31To60Cents: 0,
+      days61PlusCents: 0,
+      totalCents: 0,
+    };
+    const daysPastDue = diffDays(bill.dueDate || bill.date);
+    if (daysPastDue <= 0) {
+      row.currentCents += bill.amountCents;
+    } else if (daysPastDue <= 30) {
+      row.days1To30Cents += bill.amountCents;
+    } else if (daysPastDue <= 60) {
+      row.days31To60Cents += bill.amountCents;
+    } else {
+      row.days61PlusCents += bill.amountCents;
+    }
+    row.totalCents += bill.amountCents;
+    apMap.set(bill.vendorId, row);
+  }
+  const apRows = Array.from(apMap.values());
+  const apTotalCents = apRows.reduce((s, r) => s + r.totalCents, 0);
+
   // General Ledger Calculation
   const generalLedger = accountsWithBalances
     .map((acc) => {
@@ -1552,6 +1880,10 @@ export function getComputedQboState(): ComputedQboState {
     .filter((e) => e.type === "Bill" && e.status !== "Paid")
     .reduce((s, e) => s + e.amountCents, 0);
 
+  const openEstimatesCents = store.estimates
+    .filter((e) => e.status !== "Converted")
+    .reduce((s, e) => s + e.totalCents, 0);
+
   const forReviewCount = store.bankTransactions.filter(
     (t) => t.status === "for_review"
   ).length;
@@ -1582,6 +1914,20 @@ export function getComputedQboState(): ComputedQboState {
         totalLiabilitiesAndEquityCents,
         isBalanced: totalAssetsCents === totalLiabilitiesAndEquityCents,
       },
+      trialBalance: {
+        rows: tbRows,
+        totalDebitsCents: tbTotalDebits,
+        totalCreditsCents: tbTotalCredits,
+        isBalanced: tbTotalDebits === tbTotalCredits,
+      },
+      arAging: {
+        rows: arRows,
+        totalCents: arTotalCents,
+      },
+      apAging: {
+        rows: apRows,
+        totalCents: apTotalCents,
+      },
       generalLedger,
     },
     kpis: {
@@ -1590,6 +1936,7 @@ export function getComputedQboState(): ComputedQboState {
       overdueInvoicesCents,
       paidLast30DaysCents,
       openBillsCents,
+      openEstimatesCents,
       forReviewCount,
     },
   };
@@ -1614,6 +1961,16 @@ export function postJournalEntry(input: {
   }>;
 }): QboJournalEntry {
   const store = getRawStore();
+
+  // Check Period Lock
+  if (
+    store.lockedThroughDate &&
+    input.date <= store.lockedThroughDate
+  ) {
+    throw new Error(
+      `Books are closed through ${store.lockedThroughDate}. Cannot post entries on or before the closing date.`
+    );
+  }
 
   const nonZeroLines = input.lines.filter(
     (l) => l.debitCents > 0 || l.creditCents > 0
@@ -1669,7 +2026,7 @@ export function postJournalEntry(input: {
 
   const nextNum = 1001 + store.journalEntries.length;
   const entry: QboJournalEntry = {
-    id: `je-${Date.now()}`,
+    id: `je-${Date.now()}-${nextNum}`,
     entryNumber: `JE-${nextNum}`,
     date: input.date,
     memo: input.memo,
@@ -1681,10 +2038,18 @@ export function postJournalEntry(input: {
   };
 
   store.journalEntries.unshift(entry);
+  appendAuditLog(
+    `Posted ${entry.entryNumber}`,
+    `${entry.memo} (${entry.sourceType})`,
+    totalDebitCents
+  );
   return entry;
 }
 
-export function reverseJournalEntry(entryId: string): QboJournalEntry {
+export function reverseJournalEntry(
+  entryId: string,
+  reversalDate?: string
+): QboJournalEntry {
   const store = getRawStore();
   const original = store.journalEntries.find((e) => e.id === entryId);
   if (!original) {
@@ -1694,8 +2059,11 @@ export function reverseJournalEntry(entryId: string): QboJournalEntry {
     throw new Error("This journal entry has already been reversed.");
   }
 
+  const dateToUse =
+    reversalDate || new Date().toISOString().slice(0, 10);
+
   const reversal = postJournalEntry({
-    date: new Date().toISOString().slice(0, 10),
+    date: dateToUse,
     memo: `Reversal of ${original.entryNumber}: ${original.memo}`,
     sourceType: "reversal",
     reversesEntryId: original.id,
@@ -1735,9 +2103,6 @@ export function categorizeBankTransaction(input: {
   const absCents = Math.abs(tx.amountCents);
   const isDeposit = tx.amountCents >= 0;
 
-  // For both Bank (asset) and Credit Card (liability):
-  // Deposit / Payment In -> Debit Bank/CC, Credit Category
-  // Spend / Charge Out   -> Debit Category, Credit Bank/CC
   const entry = postJournalEntry({
     date: tx.date,
     memo: `Bank Feed: ${tx.description}`,
@@ -1791,6 +2156,7 @@ export function excludeBankTransaction(transactionId: string): void {
   const tx = store.bankTransactions.find((t) => t.id === transactionId);
   if (!tx) throw new Error("Bank transaction not found.");
   tx.status = "excluded";
+  appendAuditLog("Bank Transaction Excluded", tx.description, Math.abs(tx.amountCents));
 }
 
 export function importBankCsvRows(input: {
@@ -1846,6 +2212,11 @@ export function importBankCsvRows(input: {
 
     importedCount++;
   }
+
+  appendAuditLog(
+    "Bank CSV Imported",
+    `Imported ${importedCount} rows (${duplicateCount} duplicates skipped)`
+  );
 
   return { importedCount, duplicateCount };
 }
@@ -1921,6 +2292,155 @@ export function createInvoice(input: {
 
   store.invoices.unshift(invoice);
   return invoice;
+}
+
+export function createEstimate(input: {
+  customerId: string;
+  date: string;
+  expirationDate: string;
+  lines: Array<{
+    serviceName: string;
+    description: string;
+    quantity: number;
+    rateCents: number;
+    incomeAccountId: string;
+  }>;
+}): QboEstimate {
+  const store = getRawStore();
+  const customer = store.customers.find((c) => c.id === input.customerId);
+  if (!customer) throw new Error("Customer not found.");
+
+  const builtLines = input.lines.map((l) => ({
+    serviceName: l.serviceName,
+    description: l.description,
+    quantity: l.quantity,
+    rateCents: l.rateCents,
+    amountCents: Math.round(l.quantity * l.rateCents),
+    incomeAccountId: l.incomeAccountId,
+  }));
+  const totalCents = builtLines.reduce((s, l) => s + l.amountCents, 0);
+
+  const estimateNumber = `EST-${2001 + store.estimates.length}`;
+  const est: QboEstimate = {
+    id: `est-${Date.now()}`,
+    estimateNumber,
+    customerId: customer.id,
+    customerName: customer.name,
+    date: input.date,
+    expirationDate: input.expirationDate,
+    status: "Pending",
+    totalCents,
+    lines: builtLines,
+  };
+
+  store.estimates.unshift(est);
+  appendAuditLog(
+    `Estimate ${estimateNumber} Created`,
+    `Quote for ${customer.name}`,
+    totalCents
+  );
+  return est;
+}
+
+export function convertEstimateToInvoice(estimateId: string): QboInvoice {
+  const store = getRawStore();
+  const est = store.estimates.find((e) => e.id === estimateId);
+  if (!est) throw new Error("Estimate not found.");
+  if (est.status === "Converted") {
+    throw new Error("Estimate has already been converted to an invoice.");
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+  const invoice = createInvoice({
+    customerId: est.customerId,
+    date: today,
+    dueDate: est.expirationDate,
+    lines: est.lines,
+  });
+
+  est.status = "Converted";
+  est.convertedInvoiceId = invoice.id;
+  appendAuditLog(
+    "Estimate Converted to Invoice",
+    `${est.estimateNumber} -> Invoice #${invoice.invoiceNumber}`,
+    est.totalCents
+  );
+  return invoice;
+}
+
+export function createProductService(input: {
+  name: string;
+  sku: string;
+  type: "Service" | "Non-Inventory" | "Inventory";
+  description: string;
+  rateCents: number;
+  incomeAccountId: string;
+}): QboProductService {
+  const store = getRawStore();
+  const acc = store.accounts.find((a) => a.id === input.incomeAccountId);
+  if (!acc) throw new Error("Income account not found.");
+
+  const item: QboProductService = {
+    id: `prod-${Date.now()}`,
+    name: input.name,
+    sku: input.sku || `ITEM-${store.productsAndServices.length + 1}`,
+    type: input.type,
+    description: input.description,
+    rateCents: input.rateCents,
+    incomeAccountId: acc.id,
+    incomeAccountName: acc.name,
+  };
+  store.productsAndServices.push(item);
+  appendAuditLog("Product/Service Added", `${item.name} (${item.sku})`, item.rateCents);
+  return item;
+}
+
+export function createTransfer(input: {
+  fromAccountId: string;
+  toAccountId: string;
+  date: string;
+  amountCents: number;
+  memo?: string;
+}): QboJournalEntry {
+  if (input.fromAccountId === input.toAccountId) {
+    throw new Error("From and To accounts must be different.");
+  }
+  const store = getRawStore();
+  const fromAcc = store.accounts.find((a) => a.id === input.fromAccountId);
+  const toAcc = store.accounts.find((a) => a.id === input.toAccountId);
+  if (!fromAcc || !toAcc) throw new Error("Transfer account not found.");
+
+  return postJournalEntry({
+    date: input.date,
+    memo:
+      input.memo || `Funds Transfer: ${fromAcc.name} → ${toAcc.name}`,
+    sourceType: "transfer",
+    lines: [
+      {
+        accountId: toAcc.id,
+        description: `Transfer in from ${fromAcc.name}`,
+        debitCents: input.amountCents,
+        creditCents: 0,
+      },
+      {
+        accountId: fromAcc.id,
+        description: `Transfer out to ${toAcc.name}`,
+        debitCents: 0,
+        creditCents: input.amountCents,
+      },
+    ],
+  });
+}
+
+export function setPeriodLockDate(lockedThroughDate: string | null): void {
+  const store = getRawStore();
+  store.lockedThroughDate = lockedThroughDate;
+  appendAuditLog(
+    "Period Lock Updated",
+    lockedThroughDate
+      ? `Closed books through ${lockedThroughDate}`
+      : "Unlocked closed period"
+  );
 }
 
 export function receiveInvoicePayment(input: {
@@ -2117,6 +2637,7 @@ export function createAccount(input: {
 
   store.accounts.push(acc);
   store.accounts.sort((a, b) => a.code.localeCompare(b.code));
+  appendAuditLog("Account Created", `${acc.code} — ${acc.name} (${acc.type})`);
   return acc;
 }
 
@@ -2154,6 +2675,7 @@ export function createRule(input: {
     }
   }
 
+  appendAuditLog("Bank Rule Added", `${rule.name} (contains "${rule.containsText}")`);
   return rule;
 }
 
@@ -2188,5 +2710,10 @@ export function finishReconciliation(input: {
   };
 
   store.reconciliations.unshift(rec);
+  appendAuditLog(
+    "Account Reconciled",
+    `${bankAcc.name} statement ${input.statementDate} (${clearedCount} entries cleared)`,
+    input.endingBalanceCents
+  );
   return rec;
 }
