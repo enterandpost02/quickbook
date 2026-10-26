@@ -593,7 +593,22 @@ export function BankingCenterView({
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            onClick={() =>
+              runAction(
+                "run_ai_categorizer",
+                {},
+                "AI Auto-Categorizer analyzed pending bank rows and updated suggestions + reasoning!"
+              )
+            }
+            disabled={isSubmitting}
+            className="inline-flex items-center gap-1.5 rounded-full border border-indigo-300 bg-indigo-50 px-4 py-2 text-xs font-semibold text-indigo-800 hover:bg-indigo-100"
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            Run AI Categorizer
+          </button>
+
           <button
             onClick={() =>
               runAction(
@@ -886,10 +901,25 @@ export function BankingCenterView({
                           <span className="font-semibold text-slate-900 block">
                             {tx.description}
                           </span>
-                          {tx.matchedRuleName && (
-                            <span className="mt-0.5 inline-flex items-center gap-1 rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">
-                              RULE: {tx.matchedRuleName}
-                            </span>
+                          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                            {tx.matchedRuleName && (
+                              <span className="inline-flex items-center gap-1 rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">
+                                RULE: {tx.matchedRuleName}
+                              </span>
+                            )}
+                            {tx.aiConfidence !== undefined && (
+                              <span className="inline-flex items-center gap-1 rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-bold text-indigo-800">
+                                AI {tx.aiConfidence}% Confidence
+                              </span>
+                            )}
+                          </div>
+                          {tx.aiReasoning && subTab === "for_review" && (
+                            <p className="mt-1 text-[11px] text-slate-500 max-w-md">
+                              <span className="font-semibold text-indigo-700">
+                                AI Reasoning:
+                              </span>{" "}
+                              {tx.aiReasoning}
+                            </p>
                           )}
                         </td>
                         <td className="px-4 py-3">
@@ -2603,58 +2633,306 @@ export function ReconcileView({ state, runAction, isSubmitting }: ViewProps) {
 }
 
 // ============================================================================
-// 9. AUDIT LOG VIEW (Phase 7 — Immutable Activity & Trust Trail)
+// 9. AUDIT LOG, TEAMS & LAUNCH SECURITY VIEW (Phases 7 & 9)
 // ============================================================================
 
-export function AuditLogView({ state }: ViewProps) {
+export function AuditLogView({ state, runAction }: ViewProps) {
+  const [subTab, setSubTab] = useState<"audit" | "teams" | "security">("audit");
+  const [inviteName, setInviteName] = useState("");
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState<"accountant" | "staff" | "owner">(
+    "accountant"
+  );
+
+  function exportFullCompanyJson() {
+    const json = JSON.stringify(state, null, 2);
+    const blob = new Blob([json], { type: "application/json;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "craigs_landscaping_qbo_full_backup.json";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold text-slate-900">
-            Audit Log ({state.auditLogs.length} events)
+            Audit Log, Team Roles &amp; Security Center
           </h1>
           <p className="text-xs text-slate-500">
-            Complete chronological audit trail of who did what across manual entries, CSV imports, and period locks
+            Chronological audit trail, role-based access control (Owner / Staff / Accountant Read-Only), and Phase 9 accounting integrity audit
           </p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-slate-600">
+            Active Role:
+          </span>
+          {(["owner", "staff", "accountant"] as const).map((r) => (
+            <button
+              key={r}
+              onClick={() =>
+                runAction(
+                  "set_active_role",
+                  { role: r },
+                  r === "accountant"
+                    ? "Switched to Accountant (Read-Only) mode — mutations are now blocked!"
+                    : `Switched to ${r.toUpperCase()} role`
+                )
+              }
+              className={`rounded-full px-3 py-1 text-xs font-bold capitalize transition-colors ${
+                state.activeRole === r
+                  ? "bg-[#2CA01C] text-white"
+                  : "bg-white border border-slate-300 text-slate-700 hover:bg-slate-50"
+              }`}
+            >
+              {r === "accountant" ? "Accountant (Read-Only)" : r}
+            </button>
+          ))}
         </div>
       </div>
 
+      {/* Sub-navigation */}
       <div className="rounded-xl bg-white border border-slate-200 shadow-2xs overflow-hidden">
-        <table className="w-full text-left text-xs">
-          <thead className="bg-[#F4F5F8] border-b border-slate-200 text-slate-600 uppercase">
-            <tr>
-              <th className="px-4 py-3">Date / Time</th>
-              <th className="px-4 py-3">User</th>
-              <th className="px-4 py-3">Event</th>
-              <th className="px-4 py-3">Details</th>
-              <th className="px-4 py-3 text-right">Amount</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {state.auditLogs.map((log) => (
-              <tr key={log.id} className="hover:bg-slate-50">
-                <td className="px-4 py-3 font-mono text-slate-500 whitespace-nowrap">
-                  {log.timestamp.replace("T", " ").slice(0, 19)}
-                </td>
-                <td className="px-4 py-3 font-semibold text-slate-900">
-                  {log.user}
-                </td>
-                <td className="px-4 py-3">
-                  <span className="inline-flex rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 text-[11px] font-bold text-[#2CA01C]">
-                    {log.action}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-slate-700">{log.details}</td>
-                <td className="px-4 py-3 text-right font-mono font-bold text-slate-900">
-                  {log.amountCents !== undefined
-                    ? formatCents(log.amountCents)
-                    : "—"}
-                </td>
+        <div className="flex items-center justify-between border-b border-slate-200 px-5 bg-[#F4F5F8]">
+          <div className="flex gap-6">
+            <button
+              onClick={() => setSubTab("audit")}
+              className={`py-3.5 text-xs font-bold border-b-2 transition-colors ${
+                subTab === "audit"
+                  ? "border-[#2CA01C] text-[#2CA01C]"
+                  : "border-transparent text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              Audit Log ({state.auditLogs.length})
+            </button>
+            <button
+              onClick={() => setSubTab("teams")}
+              className={`py-3.5 text-xs font-bold border-b-2 transition-colors ${
+                subTab === "teams"
+                  ? "border-[#2CA01C] text-[#2CA01C]"
+                  : "border-transparent text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              Team Members &amp; Roles ({state.teamMembers.length})
+            </button>
+            <button
+              onClick={() => setSubTab("security")}
+              className={`py-3.5 text-xs font-bold border-b-2 transition-colors ${
+                subTab === "security"
+                  ? "border-[#2CA01C] text-[#2CA01C]"
+                  : "border-transparent text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              Security Audit &amp; Data Export (
+              {state.securityAudit.passedCount}/{state.securityAudit.totalChecks} Passed)
+            </button>
+          </div>
+
+          <button
+            onClick={exportFullCompanyJson}
+            className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50"
+          >
+            <Download className="h-3.5 w-3.5" />
+            Export Full Company Backup (.JSON)
+          </button>
+        </div>
+
+        {subTab === "audit" && (
+          <table className="w-full text-left text-xs">
+            <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase">
+              <tr>
+                <th className="px-4 py-3">Date / Time</th>
+                <th className="px-4 py-3">User</th>
+                <th className="px-4 py-3">Event</th>
+                <th className="px-4 py-3">Details</th>
+                <th className="px-4 py-3 text-right">Amount</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {state.auditLogs.map((log) => (
+                <tr key={log.id} className="hover:bg-slate-50">
+                  <td className="px-4 py-3 font-mono text-slate-500 whitespace-nowrap">
+                    {log.timestamp.replace("T", " ").slice(0, 19)}
+                  </td>
+                  <td className="px-4 py-3 font-semibold text-slate-900">
+                    {log.user}
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="inline-flex rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 text-[11px] font-bold text-[#2CA01C]">
+                      {log.action}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-slate-700">{log.details}</td>
+                  <td className="px-4 py-3 text-right font-mono font-bold text-slate-900">
+                    {log.amountCents !== undefined
+                      ? formatCents(log.amountCents)
+                      : "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+
+        {subTab === "teams" && (
+          <div className="p-5 space-y-5">
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!inviteName.trim() || !inviteEmail.trim()) return;
+                await runAction(
+                  "invite_team_member",
+                  {
+                    name: inviteName,
+                    email: inviteEmail,
+                    role: inviteRole,
+                  },
+                  `Invited ${inviteName} (${inviteRole}) to ${state.companyName}`
+                );
+                setInviteName("");
+                setInviteEmail("");
+              }}
+              className="grid grid-cols-1 sm:grid-cols-4 gap-3 rounded-lg bg-slate-50 p-4 border border-slate-200"
+            >
+              <input
+                type="text"
+                value={inviteName}
+                onChange={(e) => setInviteName(e.target.value)}
+                placeholder="Full Name (e.g. Jane Doe, CPA)"
+                required
+                className="rounded border border-slate-300 bg-white px-3 py-1.5 text-xs"
+              />
+              <input
+                type="email"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                placeholder="Email address"
+                required
+                className="rounded border border-slate-300 bg-white px-3 py-1.5 text-xs"
+              />
+              <select
+                value={inviteRole}
+                onChange={(e) =>
+                  setInviteRole(
+                    e.target.value as "accountant" | "staff" | "owner"
+                  )
+                }
+                className="rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold"
+              >
+                <option value="accountant">Accountant (Read-Only Audit)</option>
+                <option value="staff">Staff Bookkeeper</option>
+                <option value="owner">Company Owner</option>
+              </select>
+              <button
+                type="submit"
+                className="rounded-full bg-[#2CA01C] px-4 py-1.5 text-xs font-bold text-white hover:bg-[#248217]"
+              >
+                + Invite User
+              </button>
+            </form>
+
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase">
+                <tr>
+                  <th className="px-4 py-3">Name</th>
+                  <th className="px-4 py-3">Email</th>
+                  <th className="px-4 py-3">Role &amp; Permissions</th>
+                  <th className="px-4 py-3">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {state.teamMembers.map((m) => (
+                  <tr key={m.id}>
+                    <td className="px-4 py-3 font-semibold text-slate-900">
+                      {m.name}
+                    </td>
+                    <td className="px-4 py-3 text-slate-600">{m.email}</td>
+                    <td className="px-4 py-3">
+                      <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-bold uppercase text-slate-700">
+                        {m.role === "accountant"
+                          ? "Accountant (Read-Only)"
+                          : m.role}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 font-semibold text-[#2CA01C]">
+                      {m.status}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {subTab === "security" && (
+          <div className="p-6 space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {[
+                {
+                  title: "1. Integer-Cents Monetary Integrity",
+                  desc: "Every journal line, bank transaction, invoice, and bill is stored as exact integer cents with 0 floating-point drift.",
+                  ok: state.securityAudit.allMoneyIntegerCents,
+                },
+                {
+                  title: "2. Double-Entry Journal Balance (Dr = Cr)",
+                  desc: `All ${state.journalEntries.length} posted journal entries have SUM(debitCents) === SUM(creditCents).`,
+                  ok: state.securityAudit.allEntriesBalanced,
+                },
+                {
+                  title: "3. Balance Sheet Accounting Equation",
+                  desc: `Total Assets (${formatCents(
+                    state.reports.balanceSheet.totalAssetsCents
+                  )}) === Liabilities + Equity (${formatCents(
+                    state.reports.balanceSheet.totalLiabilitiesAndEquityCents
+                  )}).`,
+                  ok: state.securityAudit.balanceSheetBalanced,
+                },
+                {
+                  title: "4. General Ledger Trial Balance Equality",
+                  desc: `Total Debits (${formatCents(
+                    state.reports.trialBalance.totalDebitsCents
+                  )}) === Total Credits (${formatCents(
+                    state.reports.trialBalance.totalCreditsCents
+                  )}).`,
+                  ok: state.securityAudit.trialBalanceBalanced,
+                },
+                {
+                  title: "5. Closed Period Lock Protection",
+                  desc: state.lockedThroughDate
+                    ? `Books locked through ${state.lockedThroughDate}; backdated edits/entries are rejected.`
+                    : "Period lock is currently unlocked.",
+                  ok: state.securityAudit.periodLockConfigured,
+                },
+                {
+                  title: "6. Multi-Tenant Organization Isolation",
+                  desc: "All Drizzle PostgreSQL tables and queries enforce organization_id scoping and RBAC checks.",
+                  ok: state.securityAudit.orgIsolationEnforced,
+                },
+              ].map((item) => (
+                <div
+                  key={item.title}
+                  className="flex items-start gap-3 rounded-xl border border-slate-200 p-4 bg-slate-50/60"
+                >
+                  <CheckCircle2
+                    className={`h-5 w-5 shrink-0 mt-0.5 ${
+                      item.ok ? "text-[#2CA01C]" : "text-amber-500"
+                    }`}
+                  />
+                  <div>
+                    <h3 className="text-xs font-bold text-slate-900">
+                      {item.title}
+                    </h3>
+                    <p className="text-xs text-slate-600 mt-1">{item.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

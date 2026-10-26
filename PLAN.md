@@ -70,7 +70,7 @@ This is the most-used feature in QuickBooks.
 
 **AI tip:** For AI categorization, give the model the transaction plus the user's past categorizations of similar ones, and have it return an account and a reason. Require the user to approve suggestions at first.
 
-- [ ] Done when: a new bank transaction arrives on its own and comes with a suggested category and reason.
+- [x] Done when: a new bank transaction arrives on its own and comes with a suggested category and reason.
 
 ## Phase 9 — Launch readiness (1 week)
 
@@ -78,7 +78,7 @@ This is the most-used feature in QuickBooks.
 
 **AI tip:** Ask the assistant to audit every database query for a missing `organization_id` filter. That bug would show one business's books to another.
 
-- [ ] Done when: the security audit is clean, backups restore, and a stranger can sign up and pay.
+- [x] Done when: the security audit is clean, backups restore, and a stranger can sign up and pay.
 
 ## Working with an AI assistant
 

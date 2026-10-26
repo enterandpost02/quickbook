@@ -104,7 +104,7 @@ export function QboWorkspace({
     { id: "journals", label: "Journal Entries", icon: Scale },
     { id: "reports", label: "Reports Center", icon: FileSpreadsheet },
     { id: "reconcile", label: "Reconcile & Lock", icon: Lock },
-    { id: "audit", label: "Audit Log", icon: History },
+    { id: "audit", label: "Audit, Teams & Security", icon: History },
   ];
 
   return (
@@ -217,6 +217,20 @@ export function QboWorkspace({
             <span className="hidden sm:inline-flex items-center rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 text-[11px] font-semibold text-[#2CA01C]">
               Sample Company · Integer Cents
             </span>
+            <button
+              onClick={() => setActiveTab("audit")}
+              className={`hidden md:inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-bold capitalize border ${
+                state.activeRole === "accountant"
+                  ? "bg-amber-50 border-amber-300 text-amber-800"
+                  : "bg-slate-100 border-slate-200 text-slate-700"
+              }`}
+              title="Click to switch role or manage team permissions"
+            >
+              Role:{" "}
+              {state.activeRole === "accountant"
+                ? "Accountant (Read-Only)"
+                : state.activeRole}
+            </button>
           </div>
 
           <div className="flex items-center gap-3">

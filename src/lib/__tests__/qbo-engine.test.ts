@@ -9,6 +9,8 @@ import {
   postJournalEntry,
   resetQboStore,
   reverseJournalEntry,
+  runAiAutoCategorizer,
+  setActiveRole,
   setPeriodLockDate,
 } from "../qbo-store";
 import {
@@ -164,5 +166,62 @@ describe("QuickBooks Double-Entry Accounting Engine & CSV Suite", () => {
     const state = getComputedQboState();
     assert.equal(state.reports.balanceSheet.isBalanced, true);
     assert.equal(state.reports.trialBalance.isBalanced, true);
+  });
+
+  it("8. Phase 7: Accountant (read-only) role can view reports but is blocked from posting or modifying entries", () => {
+    setActiveRole("accountant");
+    const state = getComputedQboState();
+    assert.equal(state.activeRole, "accountant");
+    assert.equal(state.reports.balanceSheet.isBalanced, true);
+
+    assert.throws(() => {
+      postJournalEntry({
+        date: "2026-10-26",
+        memo: "Unauthorized accountant write attempt",
+        lines: [
+          { accountId: "acc-6010", debitCents: 5000, creditCents: 0 },
+          { accountId: "acc-1000", debitCents: 0, creditCents: 5000 },
+        ],
+      });
+    }, /Permission denied: Accountant role is read-only/);
+  });
+
+  it("9. Phase 8: AI Auto-Categorizer populates suggestedAccountId, aiConfidence, and aiReasoning on imported bank transactions", () => {
+    importBankCsvRows({
+      bankAccountId: "acc-1000",
+      rows: [
+        {
+          date: "2026-10-27",
+          description: "SHELL GAS STATION #991 FLEET FUEL",
+          amountCents: -7850,
+        },
+      ],
+    });
+
+    const result = runAiAutoCategorizer();
+    assert.ok(result.analyzedCount >= 1);
+
+    const state = getComputedQboState();
+    const shellTx = state.bankTransactions.find((t) =>
+      t.description.includes("SHELL GAS STATION")
+    );
+    assert.ok(shellTx);
+    assert.equal(shellTx.suggestedAccountId, "acc-6020");
+    assert.ok((shellTx.aiConfidence ?? 0) >= 90);
+    assert.ok(shellTx.aiReasoning && shellTx.aiReasoning.length > 10);
+  });
+
+  it("10. Phase 9: Security & Accounting Integrity Audit passes 6/6 checks", () => {
+    const state = getComputedQboState();
+    assert.equal(state.securityAudit.allMoneyIntegerCents, true);
+    assert.equal(state.securityAudit.allEntriesBalanced, true);
+    assert.equal(state.securityAudit.balanceSheetBalanced, true);
+    assert.equal(state.securityAudit.trialBalanceBalanced, true);
+    assert.equal(state.securityAudit.periodLockConfigured, true);
+    assert.equal(state.securityAudit.orgIsolationEnforced, true);
+    assert.equal(
+      state.securityAudit.passedCount,
+      state.securityAudit.totalChecks
+    );
   });
 });

@@ -14,11 +14,14 @@ import {
   getComputedQboState,
   getRawStore,
   importBankCsvRows,
+  inviteTeamMember,
   payVendorBill,
   postJournalEntry,
   receiveInvoicePayment,
   resetQboStore,
   reverseJournalEntry,
+  runAiAutoCategorizer,
+  setActiveRole,
   setPeriodLockDate,
 } from "@/lib/qbo-store";
 
@@ -119,6 +122,18 @@ export async function POST(request: Request) {
       }
       case "reconcile": {
         finishReconciliation(payload);
+        break;
+      }
+      case "run_ai_categorizer": {
+        runAiAutoCategorizer();
+        break;
+      }
+      case "set_active_role": {
+        setActiveRole(payload.role);
+        break;
+      }
+      case "invite_team_member": {
+        inviteTeamMember(payload);
         break;
       }
       case "reset_demo": {
