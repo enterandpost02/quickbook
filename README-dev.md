@@ -69,3 +69,10 @@
 
 5. **Migrations Only.**
    - Never alter database tables ad-hoc. Always update `src/db/schema.ts`, generate a SQL migration file in `drizzle/`, review the SQL, and apply it cleanly.
+
+6. **Living Documentation (Mandatory Update Rule).**
+   - After every single task, feature addition, or bug fix, you **MUST** update the 4 living documentation files in `docs/`:
+     - [`docs/COMPLETED.md`](./docs/COMPLETED.md) — Short bullet points of everything completed.
+     - [`docs/RULES.md`](./docs/RULES.md) — Core accounting, security, and engineering rules.
+     - [`docs/REMAINING.md`](./docs/REMAINING.md) — Remaining features to build.
+     - [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) — System architecture and double-entry data flow.
