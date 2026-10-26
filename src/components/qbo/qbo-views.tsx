@@ -1,0 +1,2196 @@
+"use client";
+
+import React, { useState } from "react";
+import {
+  ArrowDownRight,
+  ArrowUpRight,
+  Building2,
+  Check,
+  CheckCircle2,
+  CreditCard,
+  Download,
+  FileSpreadsheet,
+  FileText,
+  Filter,
+  Landmark,
+  Lock,
+  Plus,
+  Receipt,
+  RotateCcw,
+  Scale,
+  Search,
+  Sparkles,
+  TrendingUp,
+  Upload,
+  Users,
+} from "lucide-react";
+import type { ComputedQboState } from "@/lib/qbo-store";
+import { formatCents, parseDollarsToCents } from "@/lib/money";
+import type { ActiveModalType } from "./qbo-modals";
+
+export type QboNavTab =
+  | "home"
+  | "banking"
+  | "sales"
+  | "expenses"
+  | "coa"
+  | "journals"
+  | "reports"
+  | "reconcile";
+
+interface ViewProps {
+  state: ComputedQboState;
+  setActiveTab: (tab: QboNavTab) => void;
+  setActiveModal: (modal: ActiveModalType) => void;
+  runAction: (
+    action: string,
+    payload?: unknown,
+    successMsg?: string
+  ) => Promise<void>;
+  isSubmitting: boolean;
+}
+
+// ============================================================================
+// 1. DASHBOARD HOME VIEW (QuickBooks "Business Overview")
+// ============================================================================
+
+export function DashboardHomeView({
+  state,
+  setActiveTab,
+  setActiveModal,
+  runAction,
+}: ViewProps) {
+  const { profitAndLoss, balanceSheet } = state.reports;
+  const bankAccounts = state.accountsWithBalances.filter(
+    (a) => a.type === "Bank" || a.type === "Credit Card"
+  );
+  const totalOutflowsCents =
+    profitAndLoss.totalCogsCents + profitAndLoss.totalExpensesCents;
+
+  const topExpenses = [
+    ...profitAndLoss.cogsLines,
+    ...profitAndLoss.expenseLines,
+  ]
+    .sort((a, b) => b.amountCents - a.amountCents)
+    .slice(0, 5);
+
+  const colors = [
+    "bg-[#2CA01C]",
+    "bg-sky-500",
+    "bg-amber-500",
+    "bg-indigo-500",
+    "bg-rose-500",
+  ];
+
+  return (
+    <div className="space-y-6">
+      {/* Top Banner / Quick Actions */}
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl bg-white p-5 border border-slate-200 shadow-2xs">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="inline-block h-2.5 w-2.5 rounded-full bg-[#2CA01C]" />
+            <span className="text-xs font-bold uppercase tracking-wider text-[#2CA01C]">
+              Business Overview · Double-Entry Ledger Active
+            </span>
+          </div>
+          <h1 className="text-xl font-bold text-slate-900 mt-0.5">
+            {state.companyName}
+          </h1>
+          <p className="text-xs text-slate-500">
+            All figures computed live in integer cents from{" "}
+            {state.journalEntries.length} balanced journal entries.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            onClick={() => setActiveModal("csv_import")}
+            className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            <Upload className="h-3.5 w-3.5 text-[#2CA01C]" />
+            Import Bank CSV
+          </button>
+          <button
+            onClick={() => setActiveModal("invoice")}
+            className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            <FileText className="h-3.5 w-3.5 text-[#2CA01C]" />
+            Create Invoice
+          </button>
+          <button
+            onClick={() => setActiveModal("expense")}
+            className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            <Receipt className="h-3.5 w-3.5 text-[#2CA01C]" />
+            Record Expense
+          </button>
+          <button
+            onClick={() => setActiveModal("journal_entry")}
+            className="inline-flex items-center gap-1.5 rounded-full bg-[#2CA01C] px-4 py-2 text-xs font-semibold text-white hover:bg-[#248217]"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Journal Entry
+          </button>
+        </div>
+      </div>
+
+      {/* Main QBO 2x2 Widget Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Card 1: Profit and Loss Widget */}
+        <div className="rounded-xl bg-white p-5 border border-slate-200 shadow-2xs flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                Profit and Loss
+              </h2>
+              <span className="text-xs text-slate-400">This Quarter</span>
+            </div>
+            <div className="mt-3">
+              <p className="text-xs text-slate-500">Net profit for period</p>
+              <p
+                className={`text-2xl font-mono font-bold ${
+                  profitAndLoss.netIncomeCents >= 0
+                    ? "text-slate-900"
+                    : "text-red-600"
+                }`}
+              >
+                {formatCents(profitAndLoss.netIncomeCents)}
+              </p>
+            </div>
+
+            {state.kpis.forReviewCount > 0 && (
+              <button
+                onClick={() => setActiveTab("banking")}
+                className="mt-3 w-full flex items-center justify-between rounded-lg bg-amber-50 border border-amber-200/80 px-3 py-2 text-xs text-amber-900 hover:bg-amber-100/70 transition-colors"
+              >
+                <span>
+                  <strong>{state.kpis.forReviewCount} bank transactions</strong>{" "}
+                  to review
+                </span>
+                <span className="font-semibold text-[#2CA01C] underline">
+                  Categorize →
+                </span>
+              </button>
+            )}
+
+            <div className="mt-5 space-y-3">
+              <div>
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="font-medium text-slate-600">Income</span>
+                  <span className="font-mono font-bold text-slate-900">
+                    {formatCents(profitAndLoss.totalIncomeCents)}
+                  </span>
+                </div>
+                <div className="h-3 w-full rounded-full bg-slate-100 overflow-hidden">
+                  <div
+                    className="h-full bg-[#2CA01C] rounded-full"
+                    style={{ width: "100%" }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="font-medium text-slate-600">
+                    Expenses &amp; COGS
+                  </span>
+                  <span className="font-mono font-bold text-slate-900">
+                    {formatCents(totalOutflowsCents)}
+                  </span>
+                </div>
+                <div className="h-3 w-full rounded-full bg-slate-100 overflow-hidden">
+                  <div
+                    className="h-full bg-sky-600 rounded-full"
+                    style={{
+                      width: `${Math.min(
+                        100,
+                        profitAndLoss.totalIncomeCents > 0
+                          ? Math.round(
+                              (totalOutflowsCents /
+                                profitAndLoss.totalIncomeCents) *
+                                100
+                            )
+                          : 50
+                      )}%`,
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-5 pt-3 border-t border-slate-100 flex justify-between items-center">
+            <button
+              onClick={() => setActiveTab("reports")}
+              className="text-xs font-semibold text-[#0077C5] hover:underline"
+            >
+              See Profit and Loss report
+            </button>
+            <span className="text-[11px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">
+              BS Balanced: {balanceSheet.isBalanced ? "Yes" : "Check"}
+            </span>
+          </div>
+        </div>
+
+        {/* Card 2: Expenses by Category */}
+        <div className="rounded-xl bg-white p-5 border border-slate-200 shadow-2xs flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                Expenses Breakdown
+              </h2>
+              <span className="text-xs text-slate-400">Last 30 Days</span>
+            </div>
+            <div className="mt-3">
+              <p className="text-xs text-slate-500">Total spending</p>
+              <p className="text-2xl font-mono font-bold text-slate-900">
+                {formatCents(totalOutflowsCents)}
+              </p>
+            </div>
+
+            <div className="mt-4 space-y-2.5">
+              {topExpenses.map((exp, idx) => {
+                const pct =
+                  totalOutflowsCents > 0
+                    ? Math.round((exp.amountCents / totalOutflowsCents) * 100)
+                    : 0;
+                return (
+                  <div key={exp.id} className="space-y-1">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="flex items-center gap-2 truncate text-slate-700">
+                        <span
+                          className={`h-2.5 w-2.5 rounded-full shrink-0 ${
+                            colors[idx % colors.length]
+                          }`}
+                        />
+                        <span className="truncate">{exp.name}</span>
+                      </span>
+                      <span className="font-mono font-semibold text-slate-900 shrink-0 ml-2">
+                        {formatCents(exp.amountCents)} ({pct}%)
+                      </span>
+                    </div>
+                    <div className="h-1.5 w-full rounded-full bg-slate-100">
+                      <div
+                        className={`h-full rounded-full ${
+                          colors[idx % colors.length]
+                        }`}
+                        style={{ width: `${Math.max(5, pct)}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="mt-5 pt-3 border-t border-slate-100">
+            <button
+              onClick={() => setActiveTab("expenses")}
+              className="text-xs font-semibold text-[#0077C5] hover:underline"
+            >
+              Manage all expenses &amp; bills
+            </button>
+          </div>
+        </div>
+
+        {/* Card 3: Bank Accounts Widget (Signature QuickBooks Card) */}
+        <div className="rounded-xl bg-white p-5 border border-slate-200 shadow-2xs flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                Bank &amp; Credit Accounts
+              </h2>
+              <button
+                onClick={() => setActiveModal("csv_import")}
+                className="text-xs font-semibold text-[#0077C5] hover:underline"
+              >
+                + Upload CSV
+              </button>
+            </div>
+
+            <div className="mt-3 divide-y divide-slate-100">
+              {bankAccounts.map((acc) => (
+                <div key={acc.id} className="py-3 first:pt-1 last:pb-1">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      {acc.type === "Credit Card" ? (
+                        <CreditCard className="h-4 w-4 text-slate-500" />
+                      ) : (
+                        <Landmark className="h-4 w-4 text-[#0077C5]" />
+                      )}
+                      <span className="text-sm font-semibold text-slate-900">
+                        {acc.name}
+                      </span>
+                    </div>
+                    {acc.forReviewCount > 0 && (
+                      <button
+                        onClick={() => setActiveTab("banking")}
+                        className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-900 hover:bg-amber-200"
+                      >
+                        {acc.forReviewCount} to review
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="mt-2 grid grid-cols-2 gap-2 text-xs bg-slate-50 rounded-lg p-2">
+                    <div>
+                      <span className="block text-[10px] uppercase text-slate-400">
+                        Bank Balance
+                      </span>
+                      <span className="font-mono font-semibold text-slate-700">
+                        {formatCents(acc.bankBalanceCents ?? acc.balanceCents)}
+                      </span>
+                    </div>
+                    <div className="text-right">
+                      <span className="block text-[10px] uppercase text-slate-400">
+                        In QuickBooks
+                      </span>
+                      <span className="font-mono font-bold text-slate-900">
+                        {formatCents(acc.balanceCents)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
+            <button
+              onClick={() => setActiveTab("banking")}
+              className="text-xs font-semibold text-[#0077C5] hover:underline"
+            >
+              Go to bank register →
+            </button>
+            <button
+              onClick={() => setActiveTab("reconcile")}
+              className="text-xs font-semibold text-slate-600 hover:text-slate-900"
+            >
+              Reconcile
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Invoices Money Bar + Recent Transactions */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Invoices Overview Card */}
+        <div className="rounded-xl bg-white p-5 border border-slate-200 shadow-2xs">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+              Invoices &amp; Accounts Receivable
+            </h2>
+            <button
+              onClick={() => setActiveTab("sales")}
+              className="text-xs font-semibold text-[#0077C5] hover:underline"
+            >
+              View all invoices
+            </button>
+          </div>
+
+          <div className="grid grid-cols-3 gap-4 mb-4">
+            <div className="border-l-4 border-amber-500 pl-3">
+              <span className="block text-xs text-slate-500">Overdue</span>
+              <span className="text-lg font-mono font-bold text-slate-900">
+                {formatCents(state.kpis.overdueInvoicesCents)}
+              </span>
+            </div>
+            <div className="border-l-4 border-sky-500 pl-3">
+              <span className="block text-xs text-slate-500">
+                Open (Unpaid)
+              </span>
+              <span className="text-lg font-mono font-bold text-slate-900">
+                {formatCents(state.kpis.openInvoicesCents)}
+              </span>
+            </div>
+            <div className="border-l-4 border-[#2CA01C] pl-3">
+              <span className="block text-xs text-slate-500">
+                Paid Last 30 Days
+              </span>
+              <span className="text-lg font-mono font-bold text-[#2CA01C]">
+                {formatCents(state.kpis.paidLast30DaysCents)}
+              </span>
+            </div>
+          </div>
+
+          {/* Multi-segment bar */}
+          <div className="h-4 w-full rounded-full bg-slate-100 flex overflow-hidden mb-5">
+            <div
+              className="bg-amber-500 h-full"
+              style={{ width: "18%" }}
+              title="Overdue"
+            />
+            <div
+              className="bg-sky-500 h-full"
+              style={{ width: "34%" }}
+              title="Open"
+            />
+            <div
+              className="bg-[#2CA01C] h-full"
+              style={{ width: "48%" }}
+              title="Paid"
+            />
+          </div>
+
+          <div className="divide-y divide-slate-100 text-xs">
+            {state.invoices.slice(0, 3).map((inv) => (
+              <div
+                key={inv.id}
+                className="py-2.5 flex items-center justify-between"
+              >
+                <div>
+                  <span className="font-semibold text-slate-900">
+                    #{inv.invoiceNumber} · {inv.customerName}
+                  </span>
+                  <span className="block text-slate-400">
+                    Due {inv.dueDate}
+                  </span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="font-mono font-bold text-slate-900">
+                    {formatCents(inv.totalCents)}
+                  </span>
+                  {inv.status !== "Paid" ? (
+                    <button
+                      onClick={() =>
+                        runAction(
+                          "receive_invoice_payment",
+                          {
+                            invoiceId: inv.id,
+                            depositAccountId: "acc-1000",
+                            date: new Date().toISOString().slice(0, 10),
+                          },
+                          `Received payment of ${formatCents(
+                            inv.balanceDueCents
+                          )} for Invoice #${inv.invoiceNumber}`
+                        )
+                      }
+                      className="rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-bold text-[#2CA01C] hover:bg-emerald-100"
+                    >
+                      Receive payment
+                    </button>
+                  ) : (
+                    <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-800">
+                      Paid
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Recent Posted Journal Entries */}
+        <div className="rounded-xl bg-white p-5 border border-slate-200 shadow-2xs">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+              Recent Ledger Postings (Double-Entry)
+            </h2>
+            <button
+              onClick={() => setActiveTab("journals")}
+              className="text-xs font-semibold text-[#0077C5] hover:underline"
+            >
+              View General Journal
+            </button>
+          </div>
+
+          <div className="divide-y divide-slate-100 text-xs">
+            {state.journalEntries.slice(0, 5).map((je) => {
+              const total = je.lines.reduce((s, l) => s + l.debitCents, 0);
+              return (
+                <div
+                  key={je.id}
+                  className="py-2.5 flex items-center justify-between gap-2"
+                >
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-bold text-slate-700">
+                        {je.entryNumber}
+                      </span>
+                      <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-slate-600">
+                        {je.sourceType.replace("_", " ")}
+                      </span>
+                      <span className="text-slate-400">{je.date}</span>
+                    </div>
+                    <p className="text-slate-700 truncate mt-0.5">{je.memo}</p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <span className="font-mono font-bold text-slate-900">
+                      {formatCents(total)}
+                    </span>
+                    <span className="block text-[10px] text-[#2CA01C]">
+                      Dr = Cr
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// 2. BANKING CENTER & CSV FEED VIEW (Transactions -> Bank Transactions)
+// ============================================================================
+
+export function BankingCenterView({
+  state,
+  setActiveModal,
+  runAction,
+  isSubmitting,
+}: ViewProps) {
+  const bankAccounts = state.accountsWithBalances.filter(
+    (a) => a.type === "Bank" || a.type === "Credit Card"
+  );
+  const [selectedBankId, setSelectedBankId] = useState(
+    bankAccounts[0]?.id ?? "acc-1000"
+  );
+  const [subTab, setSubTab] = useState<
+    "for_review" | "categorized" | "excluded" | "rules"
+  >("for_review");
+
+  // Local overrides for category dropdown per row
+  const [selectedCategoryByTx, setSelectedCategoryByTx] = useState<
+    Record<string, string>
+  >({});
+  const [payeeByTx, setPayeeByTx] = useState<Record<string, string>>({});
+
+  // New Rule state
+  const [ruleName, setRuleName] = useState("");
+  const [ruleContains, setRuleContains] = useState("");
+  const [ruleDirection, setRuleDirection] = useState<"out" | "in" | "any">(
+    "out"
+  );
+  const [ruleTargetAcc, setRuleTargetAcc] = useState("acc-5010");
+
+  const filteredTxs = state.bankTransactions.filter(
+    (t) =>
+      t.bankAccountId === selectedBankId &&
+      (subTab === "rules" ? true : t.status === subTab)
+  );
+
+  const nonBankAccounts = state.accounts.filter(
+    (a) => a.id !== selectedBankId
+  );
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-bold text-slate-900">
+            Bank Transactions &amp; CSV Feed
+          </h1>
+          <p className="text-xs text-slate-500">
+            Upload bank CSV files, review auto-categorized rules, and post to the General Ledger
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2.5">
+          <button
+            onClick={() =>
+              runAction(
+                "categorize_all_suggested",
+                { bankAccountId: selectedBankId },
+                "Accepted and posted all rule-matched bank transactions!"
+              )
+            }
+            disabled={isSubmitting}
+            className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300 bg-emerald-50 px-4 py-2 text-xs font-semibold text-[#2CA01C] hover:bg-emerald-100"
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            Accept All Rule Matches
+          </button>
+
+          <button
+            onClick={() => setActiveModal("csv_import")}
+            className="inline-flex items-center gap-1.5 rounded-full bg-[#2CA01C] px-5 py-2 text-xs font-semibold text-white shadow-xs hover:bg-[#248217]"
+          >
+            <Upload className="h-3.5 w-3.5" />
+            Upload from file (.CSV)
+          </button>
+        </div>
+      </div>
+
+      {/* QuickBooks Bank Account Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {bankAccounts.map((acc) => {
+          const isSelected = acc.id === selectedBankId;
+          return (
+            <button
+              key={acc.id}
+              onClick={() => setSelectedBankId(acc.id)}
+              className={`text-left rounded-xl p-4 border transition-all ${
+                isSelected
+                  ? "bg-[#0077C5] text-white border-[#0077C5] shadow-md"
+                  : "bg-white text-slate-900 border-slate-200 hover:border-slate-300"
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-bold truncate">{acc.name}</span>
+                <span
+                  className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
+                    isSelected
+                      ? "bg-white/20 text-white"
+                      : "bg-amber-100 text-amber-900"
+                  }`}
+                >
+                  {acc.forReviewCount} to review
+                </span>
+              </div>
+
+              <div className="mt-4 flex items-baseline justify-between">
+                <div>
+                  <span
+                    className={`block text-[10px] uppercase ${
+                      isSelected ? "text-sky-100" : "text-slate-400"
+                    }`}
+                  >
+                    Bank Balance
+                  </span>
+                  <span className="text-lg font-mono font-bold">
+                    {formatCents(acc.bankBalanceCents ?? acc.balanceCents)}
+                  </span>
+                </div>
+                <div className="text-right">
+                  <span
+                    className={`block text-[10px] uppercase ${
+                      isSelected ? "text-sky-100" : "text-slate-400"
+                    }`}
+                  >
+                    In QuickBooks
+                  </span>
+                  <span className="text-sm font-mono font-semibold">
+                    {formatCents(acc.balanceCents)}
+                  </span>
+                </div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Sub-Tabs */}
+      <div className="rounded-xl bg-white border border-slate-200 shadow-2xs overflow-hidden">
+        <div className="flex items-center justify-between border-b border-slate-200 px-5 bg-[#F4F5F8]">
+          <div className="flex gap-6">
+            {(
+              [
+                {
+                  id: "for_review",
+                  label: `For review (${
+                    state.bankTransactions.filter(
+                      (t) =>
+                        t.bankAccountId === selectedBankId &&
+                        t.status === "for_review"
+                    ).length
+                  })`,
+                },
+                {
+                  id: "categorized",
+                  label: `Categorized (${
+                    state.bankTransactions.filter(
+                      (t) =>
+                        t.bankAccountId === selectedBankId &&
+                        t.status === "categorized"
+                    ).length
+                  })`,
+                },
+                {
+                  id: "excluded",
+                  label: `Excluded (${
+                    state.bankTransactions.filter(
+                      (t) =>
+                        t.bankAccountId === selectedBankId &&
+                        t.status === "excluded"
+                    ).length
+                  })`,
+                },
+                {
+                  id: "rules",
+                  label: `Auto-Categorization Rules (${state.rules.length})`,
+                },
+              ] as const
+            ).map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setSubTab(tab.id)}
+                className={`py-3.5 text-xs font-bold border-b-2 transition-colors ${
+                  subTab === tab.id
+                    ? "border-[#2CA01C] text-[#2CA01C]"
+                    : "border-transparent text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {subTab === "rules" ? (
+          <div className="p-5 space-y-5">
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!ruleName.trim() || !ruleContains.trim()) return;
+                await runAction(
+                  "create_rule",
+                  {
+                    name: ruleName,
+                    containsText: ruleContains,
+                    direction: ruleDirection,
+                    targetAccountId: ruleTargetAcc,
+                  },
+                  `Created rule "${ruleName}" and applied to pending transactions`
+                );
+                setRuleName("");
+                setRuleContains("");
+              }}
+              className="grid grid-cols-1 sm:grid-cols-5 gap-3 rounded-lg bg-slate-50 p-4 border border-slate-200"
+            >
+              <input
+                type="text"
+                value={ruleName}
+                onChange={(e) => setRuleName(e.target.value)}
+                placeholder="Rule Name (e.g. Starbucks Meals)"
+                required
+                className="rounded border border-slate-300 bg-white px-3 py-1.5 text-xs"
+              />
+              <input
+                type="text"
+                value={ruleContains}
+                onChange={(e) => setRuleContains(e.target.value)}
+                placeholder="Description contains (e.g. STARBUCKS)"
+                required
+                className="rounded border border-slate-300 bg-white px-3 py-1.5 text-xs font-mono"
+              />
+              <select
+                value={ruleDirection}
+                onChange={(e) =>
+                  setRuleDirection(e.target.value as "out" | "in" | "any")
+                }
+                className="rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs"
+              >
+                <option value="out">Money Out (Spent)</option>
+                <option value="in">Money In (Received)</option>
+                <option value="any">Any Direction</option>
+              </select>
+              <select
+                value={ruleTargetAcc}
+                onChange={(e) => setRuleTargetAcc(e.target.value)}
+                className="rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs"
+              >
+                {nonBankAccounts.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.code} — {a.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="submit"
+                className="rounded-full bg-[#2CA01C] px-4 py-1.5 text-xs font-semibold text-white hover:bg-[#248217]"
+              >
+                + Add Rule
+              </button>
+            </form>
+
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase">
+                <tr>
+                  <th className="px-4 py-2.5">Rule Name</th>
+                  <th className="px-4 py-2.5">Condition</th>
+                  <th className="px-4 py-2.5">Assign to Account</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {state.rules.map((r) => {
+                  const target = state.accounts.find(
+                    (a) => a.id === r.targetAccountId
+                  );
+                  return (
+                    <tr key={r.id}>
+                      <td className="px-4 py-3 font-semibold text-slate-900">
+                        {r.name}
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">
+                        Description contains{" "}
+                        <code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-slate-800">
+                          {r.containsText}
+                        </code>{" "}
+                        ({r.direction})
+                      </td>
+                      <td className="px-4 py-3 font-medium text-[#2CA01C]">
+                        {target ? `${target.code} — ${target.name}` : r.targetAccountId}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase">
+                <tr>
+                  <th className="px-4 py-3">Date</th>
+                  <th className="px-4 py-3">Bank Description</th>
+                  <th className="px-4 py-3">Payee / Vendor</th>
+                  <th className="px-4 py-3">Category / Match Account</th>
+                  <th className="px-4 py-3 text-right">Spent</th>
+                  <th className="px-4 py-3 text-right">Received</th>
+                  <th className="px-4 py-3 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredTxs.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={7}
+                      className="px-6 py-12 text-center text-slate-500"
+                    >
+                      No transactions in this tab. Click{" "}
+                      <button
+                        onClick={() => setActiveModal("csv_import")}
+                        className="font-semibold text-[#2CA01C] underline"
+                      >
+                        Upload from file (.CSV)
+                      </button>{" "}
+                      to import more bank statement rows.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredTxs.map((tx) => {
+                    const chosenCatId =
+                      selectedCategoryByTx[tx.id] ??
+                      tx.suggestedAccountId ??
+                      nonBankAccounts[0]?.id ??
+                      "acc-5010";
+                    const chosenPayee = payeeByTx[tx.id] ?? tx.payee ?? "";
+
+                    return (
+                      <tr key={tx.id} className="hover:bg-slate-50/90">
+                        <td className="px-4 py-3 font-mono text-slate-600 whitespace-nowrap">
+                          {tx.date}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="font-semibold text-slate-900 block">
+                            {tx.description}
+                          </span>
+                          {tx.matchedRuleName && (
+                            <span className="mt-0.5 inline-flex items-center gap-1 rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">
+                              RULE: {tx.matchedRuleName}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          {subTab === "for_review" ? (
+                            <input
+                              type="text"
+                              value={chosenPayee}
+                              onChange={(e) =>
+                                setPayeeByTx({
+                                  ...payeeByTx,
+                                  [tx.id]: e.target.value,
+                                })
+                              }
+                              placeholder="Add payee..."
+                              className="w-36 rounded border border-slate-300 bg-white px-2 py-1 text-xs"
+                            />
+                          ) : (
+                            <span className="text-slate-700">
+                              {tx.payee || "—"}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          {subTab === "for_review" ? (
+                            <select
+                              value={chosenCatId}
+                              onChange={(e) =>
+                                setSelectedCategoryByTx({
+                                  ...selectedCategoryByTx,
+                                  [tx.id]: e.target.value,
+                                })
+                              }
+                              className="w-60 rounded border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-800"
+                            >
+                              {nonBankAccounts.map((acc) => (
+                                <option key={acc.id} value={acc.id}>
+                                  {acc.code} — {acc.name} ({acc.type})
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <span className="font-medium text-slate-700">
+                              {
+                                state.accounts.find(
+                                  (a) => a.id === tx.suggestedAccountId
+                                )?.name
+                              }
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono font-semibold text-slate-900">
+                          {tx.amountCents < 0
+                            ? formatCents(Math.abs(tx.amountCents))
+                            : ""}
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono font-semibold text-[#2CA01C]">
+                          {tx.amountCents >= 0
+                            ? formatCents(tx.amountCents)
+                            : ""}
+                        </td>
+                        <td className="px-4 py-3 text-right whitespace-nowrap">
+                          {subTab === "for_review" ? (
+                            <div className="inline-flex items-center gap-2">
+                              <button
+                                onClick={() =>
+                                  runAction(
+                                    "categorize_bank_tx",
+                                    {
+                                      transactionId: tx.id,
+                                      categoryAccountId: chosenCatId,
+                                      payee: chosenPayee,
+                                    },
+                                    `Posted ${tx.description} to General Ledger`
+                                  )
+                                }
+                                disabled={isSubmitting}
+                                className="rounded-full bg-[#2CA01C] px-3.5 py-1 text-xs font-bold text-white hover:bg-[#248217]"
+                              >
+                                Add
+                              </button>
+                              <button
+                                onClick={() =>
+                                  runAction(
+                                    "exclude_bank_tx",
+                                    { transactionId: tx.id },
+                                    "Excluded transaction from review"
+                                  )
+                                }
+                                className="text-xs text-slate-400 hover:text-slate-700"
+                              >
+                                Exclude
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-emerald-700 font-semibold">
+                              <Check className="h-3.5 w-3.5" /> Added
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// 3. SALES, INVOICES & CUSTOMERS VIEW
+// ============================================================================
+
+export function SalesAndInvoicesView({
+  state,
+  setActiveModal,
+  runAction,
+}: ViewProps) {
+  const [subTab, setSubTab] = useState<"invoices" | "customers">("invoices");
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-bold text-slate-900">
+            Sales, Invoices &amp; Customers
+          </h1>
+          <p className="text-xs text-slate-500">
+            Track open receivables, create invoices, and receive customer payments
+          </p>
+        </div>
+        <button
+          onClick={() => setActiveModal("invoice")}
+          className="inline-flex items-center gap-1.5 rounded-full bg-[#2CA01C] px-5 py-2 text-xs font-semibold text-white hover:bg-[#248217]"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          Create Invoice
+        </button>
+      </div>
+
+      {/* QuickBooks Money Bar */}
+      <div className="rounded-xl bg-white p-5 border border-slate-200 shadow-2xs">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-3">
+          <div>
+            <span className="text-xs font-bold uppercase text-amber-600">
+              {state.invoices.filter((i) => i.status === "Overdue").length}{" "}
+              Overdue
+            </span>
+            <p className="text-2xl font-mono font-bold text-slate-900 mt-0.5">
+              {formatCents(state.kpis.overdueInvoicesCents)}
+            </p>
+          </div>
+          <div>
+            <span className="text-xs font-bold uppercase text-sky-600">
+              {state.invoices.filter((i) => i.status !== "Paid").length} Open
+              Invoices (A/R)
+            </span>
+            <p className="text-2xl font-mono font-bold text-slate-900 mt-0.5">
+              {formatCents(state.kpis.openInvoicesCents)}
+            </p>
+          </div>
+          <div>
+            <span className="text-xs font-bold uppercase text-[#2CA01C]">
+              {state.invoices.filter((i) => i.status === "Paid").length} Paid
+              Last 30 Days
+            </span>
+            <p className="text-2xl font-mono font-bold text-[#2CA01C] mt-0.5">
+              {formatCents(state.kpis.paidLast30DaysCents)}
+            </p>
+          </div>
+        </div>
+        <div className="h-3 w-full rounded-full bg-slate-100 flex overflow-hidden">
+          <div className="bg-amber-500 h-full w-1/5" />
+          <div className="bg-sky-500 h-full w-2/5" />
+          <div className="bg-[#2CA01C] h-full w-2/5" />
+        </div>
+      </div>
+
+      {/* Table Card */}
+      <div className="rounded-xl bg-white border border-slate-200 shadow-2xs overflow-hidden">
+        <div className="flex gap-6 px-5 border-b border-slate-200 bg-[#F4F5F8]">
+          <button
+            onClick={() => setSubTab("invoices")}
+            className={`py-3 text-xs font-bold border-b-2 ${
+              subTab === "invoices"
+                ? "border-[#2CA01C] text-[#2CA01C]"
+                : "border-transparent text-slate-600"
+            }`}
+          >
+            Invoices ({state.invoices.length})
+          </button>
+          <button
+            onClick={() => setSubTab("customers")}
+            className={`py-3 text-xs font-bold border-b-2 ${
+              subTab === "customers"
+                ? "border-[#2CA01C] text-[#2CA01C]"
+                : "border-transparent text-slate-600"
+            }`}
+          >
+            Customers ({state.customers.length})
+          </button>
+        </div>
+
+        {subTab === "invoices" ? (
+          <table className="w-full text-left text-xs">
+            <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase">
+              <tr>
+                <th className="px-4 py-3">Date</th>
+                <th className="px-4 py-3">No.</th>
+                <th className="px-4 py-3">Customer</th>
+                <th className="px-4 py-3">Due Date</th>
+                <th className="px-4 py-3 text-right">Amount</th>
+                <th className="px-4 py-3 text-right">Open Balance</th>
+                <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {state.invoices.map((inv) => (
+                <tr key={inv.id} className="hover:bg-slate-50">
+                  <td className="px-4 py-3 font-mono text-slate-600">
+                    {inv.date}
+                  </td>
+                  <td className="px-4 py-3 font-mono font-bold text-slate-900">
+                    #{inv.invoiceNumber}
+                  </td>
+                  <td className="px-4 py-3 font-semibold text-slate-900">
+                    {inv.customerName}
+                  </td>
+                  <td className="px-4 py-3 font-mono text-slate-600">
+                    {inv.dueDate}
+                  </td>
+                  <td className="px-4 py-3 text-right font-mono font-semibold">
+                    {formatCents(inv.totalCents)}
+                  </td>
+                  <td className="px-4 py-3 text-right font-mono font-bold text-slate-900">
+                    {formatCents(inv.balanceDueCents)}
+                  </td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-bold ${
+                        inv.status === "Paid"
+                          ? "bg-emerald-100 text-emerald-800"
+                          : inv.status === "Overdue"
+                          ? "bg-amber-100 text-amber-900"
+                          : "bg-sky-100 text-sky-900"
+                      }`}
+                    >
+                      {inv.status}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    {inv.status !== "Paid" ? (
+                      <button
+                        onClick={() =>
+                          runAction(
+                            "receive_invoice_payment",
+                            {
+                              invoiceId: inv.id,
+                              depositAccountId: "acc-1000",
+                              date: new Date().toISOString().slice(0, 10),
+                            },
+                            `Recorded payment for Invoice #${inv.invoiceNumber}`
+                          )
+                        }
+                        className="font-bold text-[#0077C5] hover:underline"
+                      >
+                        Receive payment
+                      </button>
+                    ) : (
+                      <span className="text-slate-400">Deposited</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <table className="w-full text-left text-xs">
+            <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase">
+              <tr>
+                <th className="px-4 py-3">Customer / Company</th>
+                <th className="px-4 py-3">Email</th>
+                <th className="px-4 py-3">Phone</th>
+                <th className="px-4 py-3 text-right">Open Balance</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {state.customers.map((c) => {
+                const openBal = state.invoices
+                  .filter((i) => i.customerId === c.id)
+                  .reduce((s, i) => s + i.balanceDueCents, 0);
+                return (
+                  <tr key={c.id} className="hover:bg-slate-50">
+                    <td className="px-4 py-3 font-semibold text-slate-900">
+                      {c.name}
+                    </td>
+                    <td className="px-4 py-3 text-slate-600">{c.email}</td>
+                    <td className="px-4 py-3 font-mono text-slate-600">
+                      {c.phone}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono font-bold text-slate-900">
+                      {formatCents(openBal)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// 4. EXPENSES, BILLS & VENDORS VIEW
+// ============================================================================
+
+export function ExpensesAndVendorsView({
+  state,
+  setActiveModal,
+  runAction,
+}: ViewProps) {
+  const [subTab, setSubTab] = useState<"expenses" | "vendors">("expenses");
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-bold text-slate-900">
+            Expenses, Bills &amp; Vendors
+          </h1>
+          <p className="text-xs text-slate-500">
+            Record cash/card expenses, track vendor bills in Accounts Payable, and pay bills
+          </p>
+        </div>
+        <div className="flex items-center gap-2.5">
+          <button
+            onClick={() => setActiveModal("bill")}
+            className="rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            + Enter Vendor Bill
+          </button>
+          <button
+            onClick={() => setActiveModal("expense")}
+            className="rounded-full bg-[#2CA01C] px-5 py-2 text-xs font-semibold text-white hover:bg-[#248217]"
+          >
+            + New Expense
+          </button>
+        </div>
+      </div>
+
+      <div className="rounded-xl bg-white border border-slate-200 shadow-2xs overflow-hidden">
+        <div className="flex gap-6 px-5 border-b border-slate-200 bg-[#F4F5F8]">
+          <button
+            onClick={() => setSubTab("expenses")}
+            className={`py-3 text-xs font-bold border-b-2 ${
+              subTab === "expenses"
+                ? "border-[#2CA01C] text-[#2CA01C]"
+                : "border-transparent text-slate-600"
+            }`}
+          >
+            Expenses &amp; Bills ({state.expenses.length})
+          </button>
+          <button
+            onClick={() => setSubTab("vendors")}
+            className={`py-3 text-xs font-bold border-b-2 ${
+              subTab === "vendors"
+                ? "border-[#2CA01C] text-[#2CA01C]"
+                : "border-transparent text-slate-600"
+            }`}
+          >
+            Vendors ({state.vendors.length})
+          </button>
+        </div>
+
+        {subTab === "expenses" ? (
+          <table className="w-full text-left text-xs">
+            <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase">
+              <tr>
+                <th className="px-4 py-3">Date</th>
+                <th className="px-4 py-3">Type</th>
+                <th className="px-4 py-3">Ref No.</th>
+                <th className="px-4 py-3">Payee / Vendor</th>
+                <th className="px-4 py-3">Category</th>
+                <th className="px-4 py-3">Memo</th>
+                <th className="px-4 py-3 text-right">Total</th>
+                <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {state.expenses.map((exp) => (
+                <tr key={exp.id} className="hover:bg-slate-50">
+                  <td className="px-4 py-3 font-mono text-slate-600">
+                    {exp.date}
+                  </td>
+                  <td className="px-4 py-3 font-semibold text-slate-800">
+                    {exp.type}
+                  </td>
+                  <td className="px-4 py-3 font-mono text-slate-600">
+                    {exp.refNumber}
+                  </td>
+                  <td className="px-4 py-3 font-semibold text-slate-900">
+                    {exp.vendorName}
+                  </td>
+                  <td className="px-4 py-3 text-slate-700">
+                    {exp.categoryAccountName}
+                  </td>
+                  <td className="px-4 py-3 text-slate-500 max-w-xs truncate">
+                    {exp.description}
+                  </td>
+                  <td className="px-4 py-3 text-right font-mono font-bold text-slate-900">
+                    {formatCents(exp.amountCents)}
+                  </td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-bold ${
+                        exp.status === "Paid"
+                          ? "bg-emerald-100 text-emerald-800"
+                          : "bg-amber-100 text-amber-900"
+                      }`}
+                    >
+                      {exp.status}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    {exp.type === "Bill" && exp.status !== "Paid" ? (
+                      <button
+                        onClick={() =>
+                          runAction(
+                            "pay_bill",
+                            {
+                              expenseId: exp.id,
+                              bankAccountId: "acc-1000",
+                              date: new Date().toISOString().slice(0, 10),
+                            },
+                            `Paid Bill ${exp.refNumber} (${exp.vendorName}) from Checking`
+                          )
+                        }
+                        className="font-bold text-[#0077C5] hover:underline"
+                      >
+                        Pay bill
+                      </button>
+                    ) : (
+                      <span className="text-slate-400">Closed</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <table className="w-full text-left text-xs">
+            <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase">
+              <tr>
+                <th className="px-4 py-3">Vendor</th>
+                <th className="px-4 py-3">Email</th>
+                <th className="px-4 py-3">Phone</th>
+                <th className="px-4 py-3 text-right">Open Bill Balance</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {state.vendors.map((v) => {
+                const openAp = state.expenses
+                  .filter(
+                    (e) =>
+                      e.vendorId === v.id &&
+                      e.type === "Bill" &&
+                      e.status !== "Paid"
+                  )
+                  .reduce((s, e) => s + e.amountCents, 0);
+                return (
+                  <tr key={v.id} className="hover:bg-slate-50">
+                    <td className="px-4 py-3 font-semibold text-slate-900">
+                      {v.name}
+                    </td>
+                    <td className="px-4 py-3 text-slate-600">
+                      {v.email || "—"}
+                    </td>
+                    <td className="px-4 py-3 font-mono text-slate-600">
+                      {v.phone || "—"}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono font-bold text-slate-900">
+                      {formatCents(openAp)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// 5. CHART OF ACCOUNTS VIEW
+// ============================================================================
+
+export function ChartOfAccountsView({
+  state,
+  setActiveModal,
+  setActiveTab,
+}: ViewProps) {
+  const [search, setSearch] = useState("");
+
+  const filtered = state.accountsWithBalances.filter(
+    (a) =>
+      a.name.toLowerCase().includes(search.toLowerCase()) ||
+      a.code.includes(search) ||
+      a.type.toLowerCase().includes(search.toLowerCase())
+  );
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-bold text-slate-900">
+            Chart of Accounts ({state.accounts.length})
+          </h1>
+          <p className="text-xs text-slate-500">
+            Complete multi-category chart of accounts with real-time QuickBooks balances
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <Search className="h-3.5 w-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Filter by name, code or type..."
+              className="rounded-full border border-slate-300 bg-white pl-8 pr-4 py-1.5 text-xs focus:border-[#2CA01C] focus:outline-none"
+            />
+          </div>
+          <button
+            onClick={() => setActiveModal("account")}
+            className="inline-flex items-center gap-1.5 rounded-full bg-[#2CA01C] px-5 py-2 text-xs font-semibold text-white hover:bg-[#248217]"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            New Account
+          </button>
+        </div>
+      </div>
+
+      <div className="rounded-xl bg-white border border-slate-200 shadow-2xs overflow-hidden">
+        <table className="w-full text-left text-xs">
+          <thead className="bg-[#F4F5F8] border-b border-slate-200 text-slate-600 uppercase">
+            <tr>
+              <th className="px-4 py-3 w-20">Code</th>
+              <th className="px-4 py-3">Account Name</th>
+              <th className="px-4 py-3">Account Type</th>
+              <th className="px-4 py-3">Detail Type</th>
+              <th className="px-4 py-3 text-right">QuickBooks Balance</th>
+              <th className="px-4 py-3 text-right">Bank Balance</th>
+              <th className="px-4 py-3 text-right">Action</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {filtered.map((acc) => (
+              <tr key={acc.id} className="hover:bg-slate-50">
+                <td className="px-4 py-2.5 font-mono font-bold text-slate-700">
+                  {acc.code}
+                </td>
+                <td className="px-4 py-2.5 font-semibold text-slate-900">
+                  {acc.name}
+                </td>
+                <td className="px-4 py-2.5 text-slate-700">{acc.type}</td>
+                <td className="px-4 py-2.5 text-slate-500">{acc.detailType}</td>
+                <td className="px-4 py-2.5 text-right font-mono font-bold text-slate-900">
+                  {formatCents(acc.balanceCents)}
+                </td>
+                <td className="px-4 py-2.5 text-right font-mono text-slate-600">
+                  {acc.bankBalanceCents !== undefined
+                    ? formatCents(acc.bankBalanceCents)
+                    : "—"}
+                </td>
+                <td className="px-4 py-2.5 text-right">
+                  <button
+                    onClick={() => setActiveTab("reports")}
+                    className="font-semibold text-[#0077C5] hover:underline"
+                  >
+                    Run report
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// 6. MANUAL JOURNAL ENTRIES & IMMUTABLE AUDIT LEDGER VIEW
+// ============================================================================
+
+export function JournalEntriesView({
+  state,
+  setActiveModal,
+  runAction,
+  isSubmitting,
+}: ViewProps) {
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-bold text-slate-900">
+            General Journal Entries ({state.journalEntries.length})
+          </h1>
+          <p className="text-xs text-slate-500">
+            Posted entries are immutable. Corrections create reversing entries that swap debits and credits.
+          </p>
+        </div>
+        <button
+          onClick={() => setActiveModal("journal_entry")}
+          className="inline-flex items-center gap-1.5 rounded-full bg-[#2CA01C] px-5 py-2 text-xs font-semibold text-white hover:bg-[#248217]"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          New Journal Entry
+        </button>
+      </div>
+
+      <div className="space-y-4">
+        {state.journalEntries.map((je) => {
+          const totalDebits = je.lines.reduce((s, l) => s + l.debitCents, 0);
+          const totalCredits = je.lines.reduce((s, l) => s + l.creditCents, 0);
+          return (
+            <div
+              key={je.id}
+              className="rounded-xl bg-white border border-slate-200 shadow-2xs overflow-hidden"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-3 bg-[#F4F5F8] border-b border-slate-200">
+                <div className="flex items-center gap-3">
+                  <span className="font-mono text-sm font-bold text-slate-900">
+                    {je.entryNumber}
+                  </span>
+                  <span className="font-mono text-xs text-slate-600">
+                    {je.date}
+                  </span>
+                  <span className="rounded bg-white border border-slate-200 px-2 py-0.5 text-[10px] font-bold uppercase text-slate-700">
+                    {je.sourceType.replace("_", " ")}
+                  </span>
+                  {je.reversedByEntryId && (
+                    <span className="rounded bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-700">
+                      REVERSED
+                    </span>
+                  )}
+                  <span className="text-xs font-medium text-slate-700">
+                    {je.memo}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-mono font-bold text-[#2CA01C]">
+                    Balanced: {formatCents(totalDebits)}
+                  </span>
+                  {!je.reversedByEntryId && je.sourceType !== "reversal" && (
+                    <button
+                      onClick={() =>
+                        runAction(
+                          "reverse_journal_entry",
+                          { entryId: je.id },
+                          `Created reversing journal entry for ${je.entryNumber}`
+                        )
+                      }
+                      disabled={isSubmitting}
+                      className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                    >
+                      <RotateCcw className="h-3 w-3" />
+                      Reverse Entry
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50/60 text-slate-400 uppercase border-b border-slate-100">
+                  <tr>
+                    <th className="px-5 py-2">Account</th>
+                    <th className="px-5 py-2">Description</th>
+                    <th className="px-5 py-2">Name</th>
+                    <th className="px-5 py-2 text-right w-32">Debit</th>
+                    <th className="px-5 py-2 text-right w-32">Credit</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {je.lines.map((line) => (
+                    <tr key={line.id}>
+                      <td className="px-5 py-2 font-medium text-slate-900">
+                        <span className="font-mono text-slate-500 mr-1.5">
+                          {line.accountCode}
+                        </span>
+                        {line.accountName}
+                      </td>
+                      <td className="px-5 py-2 text-slate-600">
+                        {line.description}
+                      </td>
+                      <td className="px-5 py-2 text-slate-500">
+                        {line.entityName || "—"}
+                      </td>
+                      <td className="px-5 py-2 text-right font-mono font-semibold text-slate-900">
+                        {line.debitCents > 0
+                          ? formatCents(line.debitCents)
+                          : ""}
+                      </td>
+                      <td className="px-5 py-2 text-right font-mono font-semibold text-slate-900">
+                        {line.creditCents > 0
+                          ? formatCents(line.creditCents)
+                          : ""}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot className="bg-slate-50/80 border-t border-slate-200 font-mono font-bold text-xs">
+                  <tr>
+                    <td colSpan={3} className="px-5 py-2 text-right text-slate-500">
+                      TOTAL
+                    </td>
+                    <td className="px-5 py-2 text-right text-slate-900">
+                      {formatCents(totalDebits)}
+                    </td>
+                    <td className="px-5 py-2 text-right text-slate-900">
+                      {formatCents(totalCredits)}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// 7. REPORTS CENTER (Profit & Loss, Balance Sheet, General Ledger)
+// ============================================================================
+
+export function ReportsCenterView({ state }: ViewProps) {
+  const [reportTab, setReportTab] = useState<"pnl" | "bs" | "gl">("pnl");
+  const [basis, setBasis] = useState<"Accrual" | "Cash">("Accrual");
+  const { profitAndLoss, balanceSheet, generalLedger } = state.reports;
+
+  function exportReportCsv() {
+    let csv = "Section,Account Code,Account Name,Amount\n";
+    if (reportTab === "pnl") {
+      for (const l of profitAndLoss.incomeLines) {
+        csv += `Income,${l.code},"${l.name}",${(l.amountCents / 100).toFixed(2)}\n`;
+      }
+      for (const l of profitAndLoss.cogsLines) {
+        csv += `COGS,${l.code},"${l.name}",${(l.amountCents / 100).toFixed(2)}\n`;
+      }
+      for (const l of profitAndLoss.expenseLines) {
+        csv += `Expenses,${l.code},"${l.name}",${(l.amountCents / 100).toFixed(2)}\n`;
+      }
+      csv += `Net Income,,,"${(profitAndLoss.netIncomeCents / 100).toFixed(2)}"\n`;
+    } else {
+      for (const l of balanceSheet.assetLines) {
+        csv += `Assets,${l.code},"${l.name}",${(l.amountCents / 100).toFixed(2)}\n`;
+      }
+      for (const l of balanceSheet.liabilityLines) {
+        csv += `Liabilities,${l.code},"${l.name}",${(l.amountCents / 100).toFixed(2)}\n`;
+      }
+      for (const l of balanceSheet.equityLines) {
+        csv += `Equity,${l.code},"${l.name}",${(l.amountCents / 100).toFixed(2)}\n`;
+      }
+    }
+
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${reportTab}-report.csv`;
+    a.click();
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-2 bg-white p-1 rounded-full border border-slate-200">
+          {(
+            [
+              { id: "pnl", label: "Profit and Loss" },
+              { id: "bs", label: "Balance Sheet" },
+              { id: "gl", label: "General Ledger" },
+            ] as const
+          ).map((t) => (
+            <button
+              key={t.id}
+              onClick={() => setReportTab(t.id)}
+              className={`rounded-full px-4 py-1.5 text-xs font-bold transition-colors ${
+                reportTab === t.id
+                  ? "bg-[#2CA01C] text-white"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1 rounded-lg bg-white border border-slate-200 p-1 text-xs">
+            <span className="px-2 text-slate-400">Accounting method:</span>
+            <button
+              onClick={() => setBasis("Accrual")}
+              className={`rounded px-2.5 py-1 font-semibold ${
+                basis === "Accrual"
+                  ? "bg-slate-900 text-white"
+                  : "text-slate-600"
+              }`}
+            >
+              Accrual
+            </button>
+            <button
+              onClick={() => setBasis("Cash")}
+              className={`rounded px-2.5 py-1 font-semibold ${
+                basis === "Cash" ? "bg-slate-900 text-white" : "text-slate-600"
+              }`}
+            >
+              Cash
+            </button>
+          </div>
+
+          <button
+            onClick={exportReportCsv}
+            className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-4 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            <Download className="h-3.5 w-3.5 text-[#2CA01C]" />
+            Export CSV
+          </button>
+        </div>
+      </div>
+
+      {/* Report Paper Sheet */}
+      <div className="rounded-xl bg-white border border-slate-200 shadow-sm p-8 max-w-4xl mx-auto">
+        <div className="text-center border-b border-slate-200 pb-5 mb-6">
+          <h2 className="text-lg font-bold text-slate-900">
+            {state.companyName}
+          </h2>
+          <p className="text-sm font-semibold text-slate-700 mt-0.5">
+            {reportTab === "pnl"
+              ? "Profit and Loss"
+              : reportTab === "bs"
+              ? "Balance Sheet"
+              : "General Ledger"}
+          </p>
+          <p className="text-xs text-slate-400 mt-0.5">
+            {basis} Basis · All amounts in integer-cents USD
+          </p>
+        </div>
+
+        {reportTab === "pnl" && (
+          <div className="space-y-6 text-xs">
+            {/* Income */}
+            <div>
+              <h3 className="font-bold uppercase tracking-wider text-slate-500 border-b border-slate-200 pb-1.5 mb-2">
+                Income
+              </h3>
+              <div className="space-y-1.5">
+                {profitAndLoss.incomeLines.map((l) => (
+                  <div key={l.id} className="flex justify-between py-1">
+                    <span className="text-slate-800">
+                      {l.code} · {l.name}
+                    </span>
+                    <span className="font-mono font-medium text-slate-900">
+                      {formatCents(l.amountCents)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <div className="flex justify-between border-t border-slate-300 pt-2 mt-2 font-bold text-slate-900">
+                <span>Total Income</span>
+                <span className="font-mono">
+                  {formatCents(profitAndLoss.totalIncomeCents)}
+                </span>
+              </div>
+            </div>
+
+            {/* COGS */}
+            <div>
+              <h3 className="font-bold uppercase tracking-wider text-slate-500 border-b border-slate-200 pb-1.5 mb-2">
+                Cost of Goods Sold
+              </h3>
+              <div className="space-y-1.5">
+                {profitAndLoss.cogsLines.map((l) => (
+                  <div key={l.id} className="flex justify-between py-1">
+                    <span className="text-slate-800">
+                      {l.code} · {l.name}
+                    </span>
+                    <span className="font-mono font-medium text-slate-900">
+                      {formatCents(l.amountCents)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <div className="flex justify-between border-t border-slate-300 pt-2 mt-2 font-bold text-slate-900">
+                <span>Total Cost of Goods Sold</span>
+                <span className="font-mono">
+                  {formatCents(profitAndLoss.totalCogsCents)}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex justify-between bg-slate-50 p-3 rounded-lg font-bold text-sm text-slate-900">
+              <span>Gross Profit</span>
+              <span className="font-mono">
+                {formatCents(profitAndLoss.grossProfitCents)}
+              </span>
+            </div>
+
+            {/* Expenses */}
+            <div>
+              <h3 className="font-bold uppercase tracking-wider text-slate-500 border-b border-slate-200 pb-1.5 mb-2">
+                Operating Expenses
+              </h3>
+              <div className="space-y-1.5">
+                {profitAndLoss.expenseLines.map((l) => (
+                  <div key={l.id} className="flex justify-between py-1">
+                    <span className="text-slate-800">
+                      {l.code} · {l.name}
+                    </span>
+                    <span className="font-mono font-medium text-slate-900">
+                      {formatCents(l.amountCents)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <div className="flex justify-between border-t border-slate-300 pt-2 mt-2 font-bold text-slate-900">
+                <span>Total Expenses</span>
+                <span className="font-mono">
+                  {formatCents(profitAndLoss.totalExpensesCents)}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex justify-between border-t-2 border-b-4 border-double border-slate-900 py-3 font-bold text-base text-slate-900">
+              <span>Net Income</span>
+              <span className="font-mono text-[#2CA01C]">
+                {formatCents(profitAndLoss.netIncomeCents)}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {reportTab === "bs" && (
+          <div className="space-y-6 text-xs">
+            <div>
+              <h3 className="font-bold uppercase tracking-wider text-slate-500 border-b border-slate-200 pb-1.5 mb-2">
+                Assets
+              </h3>
+              <div className="space-y-1.5">
+                {balanceSheet.assetLines.map((l) => (
+                  <div key={l.id} className="flex justify-between py-1">
+                    <span className="text-slate-800">
+                      {l.code} · {l.name}{" "}
+                      <span className="text-slate-400">({l.type})</span>
+                    </span>
+                    <span className="font-mono font-medium text-slate-900">
+                      {formatCents(l.amountCents)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <div className="flex justify-between border-t-2 border-slate-900 pt-2 mt-2 font-bold text-sm text-slate-900">
+                <span>Total Assets</span>
+                <span className="font-mono">
+                  {formatCents(balanceSheet.totalAssetsCents)}
+                </span>
+              </div>
+            </div>
+
+            <div>
+              <h3 className="font-bold uppercase tracking-wider text-slate-500 border-b border-slate-200 pb-1.5 mb-2">
+                Liabilities
+              </h3>
+              <div className="space-y-1.5">
+                {balanceSheet.liabilityLines.map((l) => (
+                  <div key={l.id} className="flex justify-between py-1">
+                    <span className="text-slate-800">
+                      {l.code} · {l.name}
+                    </span>
+                    <span className="font-mono font-medium text-slate-900">
+                      {formatCents(l.amountCents)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <div className="flex justify-between border-t border-slate-300 pt-2 mt-2 font-bold text-slate-900">
+                <span>Total Liabilities</span>
+                <span className="font-mono">
+                  {formatCents(balanceSheet.totalLiabilitiesCents)}
+                </span>
+              </div>
+            </div>
+
+            <div>
+              <h3 className="font-bold uppercase tracking-wider text-slate-500 border-b border-slate-200 pb-1.5 mb-2">
+                Equity
+              </h3>
+              <div className="space-y-1.5">
+                {balanceSheet.equityLines.map((l) => (
+                  <div key={l.id} className="flex justify-between py-1">
+                    <span className="text-slate-800">
+                      {l.code} · {l.name}
+                    </span>
+                    <span className="font-mono font-medium text-slate-900">
+                      {formatCents(l.amountCents)}
+                    </span>
+                  </div>
+                ))}
+                <div className="flex justify-between py-1">
+                  <span className="text-slate-800 font-medium">
+                    Net Income (Current Period)
+                  </span>
+                  <span className="font-mono font-medium text-slate-900">
+                    {formatCents(balanceSheet.netIncomeCents)}
+                  </span>
+                </div>
+              </div>
+              <div className="flex justify-between border-t border-slate-300 pt-2 mt-2 font-bold text-slate-900">
+                <span>Total Equity</span>
+                <span className="font-mono">
+                  {formatCents(balanceSheet.totalEquityCents)}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex justify-between border-t-2 border-b-4 border-double border-slate-900 py-3 font-bold text-base text-slate-900">
+              <span className="flex items-center gap-2">
+                Total Liabilities and Equity
+                {balanceSheet.isBalanced && (
+                  <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-bold text-[#2CA01C]">
+                    ✓ Matches Total Assets
+                  </span>
+                )}
+              </span>
+              <span className="font-mono text-[#2CA01C]">
+                {formatCents(balanceSheet.totalLiabilitiesAndEquityCents)}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {reportTab === "gl" && (
+          <div className="space-y-6 text-xs">
+            {generalLedger.map((acc) => (
+              <div
+                key={acc.accountId}
+                className="border border-slate-200 rounded-lg overflow-hidden"
+              >
+                <div className="bg-[#F4F5F8] px-4 py-2.5 flex justify-between font-bold text-slate-900">
+                  <span>
+                    {acc.accountCode} — {acc.accountName} ({acc.accountType})
+                  </span>
+                  <span className="font-mono">
+                    Ending: {formatCents(acc.endingBalanceCents)}
+                  </span>
+                </div>
+                <table className="w-full text-left text-xs">
+                  <thead className="border-b border-slate-100 text-slate-400">
+                    <tr>
+                      <th className="px-4 py-1.5">Date</th>
+                      <th className="px-4 py-1.5">Entry</th>
+                      <th className="px-4 py-1.5">Description</th>
+                      <th className="px-4 py-1.5 text-right">Debit</th>
+                      <th className="px-4 py-1.5 text-right">Credit</th>
+                      <th className="px-4 py-1.5 text-right">Balance</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {acc.movements.map((m, idx) => (
+                      <tr key={idx}>
+                        <td className="px-4 py-1.5 font-mono text-slate-600">
+                          {m.date}
+                        </td>
+                        <td className="px-4 py-1.5 font-mono font-semibold">
+                          {m.entryNumber}
+                        </td>
+                        <td className="px-4 py-1.5 text-slate-700">
+                          {m.description}
+                        </td>
+                        <td className="px-4 py-1.5 text-right font-mono">
+                          {m.debitCents > 0 ? formatCents(m.debitCents) : ""}
+                        </td>
+                        <td className="px-4 py-1.5 text-right font-mono">
+                          {m.creditCents > 0 ? formatCents(m.creditCents) : ""}
+                        </td>
+                        <td className="px-4 py-1.5 text-right font-mono font-semibold">
+                          {formatCents(m.runningBalanceCents)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// 8. RECONCILE VIEW (Tick Cleared Transactions until Difference = $0.00)
+// ============================================================================
+
+export function ReconcileView({ state, runAction, isSubmitting }: ViewProps) {
+  const bankAccounts = state.accountsWithBalances.filter(
+    (a) => a.type === "Bank" || a.type === "Credit Card"
+  );
+  const [bankAccountId, setBankAccountId] = useState(
+    bankAccounts[0]?.id ?? "acc-1000"
+  );
+  const [statementDate, setStatementDate] = useState("2026-10-31");
+  const currentBank =
+    bankAccounts.find((a) => a.id === bankAccountId) ?? bankAccounts[0];
+
+  const [statementEndingDollars, setStatementEndingDollars] = useState(
+    ((currentBank?.balanceCents ?? 2805000) / 100).toFixed(2)
+  );
+
+  // Find all journal entries that touch this bank account
+  const bankEntries = state.journalEntries
+    .map((je) => {
+      const bankLine = je.lines.find((l) => l.accountId === bankAccountId);
+      if (!bankLine) return null;
+      const netCents = bankLine.debitCents - bankLine.creditCents;
+      return {
+        entryId: je.id,
+        entryNumber: je.entryNumber,
+        date: je.date,
+        memo: je.memo,
+        netCents,
+        reconciled: Boolean(je.reconciled),
+      };
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null);
+
+  const [checkedIds, setCheckedIds] = useState<Record<string, boolean>>(() => {
+    const map: Record<string, boolean> = {};
+    for (const e of bankEntries) {
+      map[e.entryId] = true;
+    }
+    return map;
+  });
+
+  let statementEndingCents = 0;
+  try {
+    statementEndingCents = parseDollarsToCents(statementEndingDollars);
+  } catch {
+    statementEndingCents = 0;
+  }
+
+  const clearedBalanceCents = bankEntries.reduce(
+    (sum, item) => (checkedIds[item.entryId] ? sum + item.netCents : sum),
+    0
+  );
+  const differenceCents = statementEndingCents - clearedBalanceCents;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-bold text-slate-900">
+            Reconcile {currentBank?.name}
+          </h1>
+          <p className="text-xs text-slate-500">
+            Match your bank statement ending balance against cleared QuickBooks transactions until Difference is $0.00
+          </p>
+        </div>
+
+        <button
+          disabled={differenceCents !== 0 || isSubmitting}
+          onClick={() =>
+            runAction(
+              "reconcile",
+              {
+                bankAccountId,
+                statementDate,
+                endingBalanceCents: statementEndingCents,
+                entryIds: Object.keys(checkedIds).filter((k) => checkedIds[k]),
+              },
+              `Reconciled ${currentBank?.name} with $0.00 difference!`
+            )
+          }
+          className="inline-flex items-center gap-1.5 rounded-full bg-[#2CA01C] px-6 py-2 text-xs font-bold text-white hover:bg-[#248217] disabled:opacity-50"
+        >
+          <CheckCircle2 className="h-4 w-4" />
+          Finish Reconciliation Now
+        </button>
+      </div>
+
+      {/* Reconciliation Math Banner */}
+      <div className="rounded-xl bg-white p-5 border border-slate-200 shadow-2xs grid grid-cols-1 sm:grid-cols-4 gap-4 items-center">
+        <div>
+          <label className="block text-[11px] font-bold uppercase text-slate-400 mb-1">
+            Account
+          </label>
+          <select
+            value={bankAccountId}
+            onChange={(e) => setBankAccountId(e.target.value)}
+            className="w-full rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold"
+          >
+            {bankAccounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-[11px] font-bold uppercase text-slate-400 mb-1">
+            Statement Ending Balance ($)
+          </label>
+          <input
+            type="text"
+            value={statementEndingDollars}
+            onChange={(e) => setStatementEndingDollars(e.target.value)}
+            className="w-full rounded border border-slate-300 px-2.5 py-1.5 font-mono text-sm font-bold"
+          />
+        </div>
+
+        <div>
+          <span className="block text-[11px] font-bold uppercase text-slate-400">
+            Cleared Balance in QuickBooks
+          </span>
+          <span className="text-xl font-mono font-bold text-slate-900">
+            {formatCents(clearedBalanceCents)}
+          </span>
+        </div>
+
+        <div
+          className={`rounded-lg p-3 text-right ${
+            differenceCents === 0
+              ? "bg-emerald-50 border border-emerald-200 text-[#2CA01C]"
+              : "bg-amber-50 border border-amber-200 text-amber-900"
+          }`}
+        >
+          <span className="block text-[11px] font-bold uppercase">
+            Difference
+          </span>
+          <span className="text-xl font-mono font-bold">
+            {formatCents(differenceCents)}
+          </span>
+        </div>
+      </div>
+
+      <div className="rounded-xl bg-white border border-slate-200 shadow-2xs overflow-hidden">
+        <table className="w-full text-left text-xs">
+          <thead className="bg-[#F4F5F8] border-b border-slate-200 text-slate-600 uppercase">
+            <tr>
+              <th className="px-4 py-3 w-12 text-center">Cleared</th>
+              <th className="px-4 py-3">Date</th>
+              <th className="px-4 py-3">Ref</th>
+              <th className="px-4 py-3">Memo / Payee</th>
+              <th className="px-4 py-3 text-right">Payment (Out)</th>
+              <th className="px-4 py-3 text-right">Deposit (In)</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {bankEntries.map((item) => (
+              <tr key={item.entryId} className="hover:bg-slate-50">
+                <td className="px-4 py-3 text-center">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(checkedIds[item.entryId])}
+                    onChange={(e) =>
+                      setCheckedIds({
+                        ...checkedIds,
+                        [item.entryId]: e.target.checked,
+                      })
+                    }
+                    className="h-4 w-4 accent-[#2CA01C] rounded"
+                  />
+                </td>
+                <td className="px-4 py-3 font-mono text-slate-600">
+                  {item.date}
+                </td>
+                <td className="px-4 py-3 font-mono font-bold">
+                  {item.entryNumber}
+                </td>
+                <td className="px-4 py-3 text-slate-800">{item.memo}</td>
+                <td className="px-4 py-3 text-right font-mono text-slate-900">
+                  {item.netCents < 0
+                    ? formatCents(Math.abs(item.netCents))
+                    : ""}
+                </td>
+                <td className="px-4 py-3 text-right font-mono font-semibold text-[#2CA01C]">
+                  {item.netCents >= 0 ? formatCents(item.netCents) : ""}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
