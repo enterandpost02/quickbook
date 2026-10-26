@@ -10,7 +10,7 @@ A launchable QuickBooks-like app takes about 3–4 months for one developer with
 
 **AI tip:** Before writing any code, create a project context file (`CLAUDE.md` or `README-dev.md`) covering your stack, folder structure and the core rules: money is stored as integer cents, posted entries are never edited, and every entry must balance. Have the assistant read it at the start of each session.
 
-- [ ] Done when: you can sign up, log in and see an empty dashboard.
+- [x] Done when: you can sign up, log in and see an empty dashboard.
 
 ## Phase 1 — Ledger core (1 week)
 

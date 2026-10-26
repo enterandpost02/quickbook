@@ -6,7 +6,7 @@
 
 ## 1. Tech Stack
 
-- **Framework:** Next.js 16 (App Router, Server Components, Server Actions) + TypeScript
+- **Framework:** Next.js 16 (App Router, Server Components, Server Actions, `cacheComponents` with `export const instant = false` on cookie-gated segments) + TypeScript
 - **Database:** PostgreSQL (Supabase Postgres via `DATABASE_URL`, with automatic local PGlite fallback in `.local-db` when `DATABASE_URL` is not configured)
 - **Supabase Client:** `@supabase/supabase-js` configured in `src/lib/supabase.ts`
 - **ORM & Migrations:** Drizzle ORM (`drizzle-orm/pg-core`) + `drizzle-kit` SQL migrations in `drizzle/`
