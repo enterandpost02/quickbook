@@ -585,7 +585,7 @@ export function QboWorkspace({
                 <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#0077C5] text-white text-xs font-bold">
                   {(
                     state.teamMembers.find((m) => m.role === state.activeRole)
-                      ?.name ?? "Craig Carlson"
+                      ?.name ?? "Enter & Post Admin"
                   )
                     .split(" ")
                     .map((n) => n[0])
@@ -594,7 +594,7 @@ export function QboWorkspace({
                 </div>
                 <span className="hidden lg:inline text-xs font-semibold text-slate-700">
                   {state.teamMembers.find((m) => m.role === state.activeRole)
-                    ?.name ?? "Craig Carlson"}
+                    ?.name ?? "Enter & Post Admin"}
                 </span>
                 <ChevronDown className="h-3 w-3 text-slate-400" />
               </button>
@@ -605,16 +605,18 @@ export function QboWorkspace({
                     <p className="text-xs font-bold">
                       {state.teamMembers.find(
                         (m) => m.role === state.activeRole
-                      )?.name ?? "Craig Carlson"}
+                      )?.name ?? "Enter & Post Admin"}
                     </p>
-                    <p className="text-[11px] text-slate-300 truncate">
+                    <p className="text-[11px] text-slate-300 truncate font-mono">
                       {state.teamMembers.find(
                         (m) => m.role === state.activeRole
-                      )?.email ?? "craig@carlsonlandscaping.com"}
+                      )?.email ?? "enterandpost02@gmail.com"}
                     </p>
                     <div className="mt-2 flex items-center gap-1.5">
                       <span className="rounded bg-[#2CA01C] px-2 py-0.5 text-[10px] font-bold uppercase text-white">
-                        {state.activeRole}
+                        {state.activeRole === "accountant"
+                          ? "Accountant (Read-Only)"
+                          : state.activeRole}
                       </span>
                       <span className="text-[10px] text-slate-300 truncate">
                         · {state.companyName}
@@ -624,9 +626,9 @@ export function QboWorkspace({
 
                   <div className="p-2 border-b border-slate-100">
                     <p className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                      Switch Active User Role
+                      Switch Active User Role (RBAC)
                     </p>
-                    {(["owner", "bookkeeper", "accountant"] as const).map(
+                    {(["owner", "staff", "accountant"] as const).map(
                       (r) => (
                         <button
                           key={r}
@@ -635,7 +637,9 @@ export function QboWorkspace({
                             await runAction(
                               "switch_role",
                               { role: r },
-                              `Switched session role to ${r.toUpperCase()}`
+                              r === "accountant"
+                                ? "Switched to Accountant (Read-Only) mode — mutations blocked"
+                                : `Switched session role to ${r.toUpperCase()}`
                             );
                           }}
                           className={`w-full flex items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-xs font-medium ${
@@ -645,7 +649,11 @@ export function QboWorkspace({
                           }`}
                         >
                           <span className="capitalize">
-                            {r} (
+                            {r === "accountant"
+                              ? "Accountant (Read-Only)"
+                              : r === "staff"
+                              ? "Staff Bookkeeper"
+                              : "Owner"} (
                             {state.teamMembers.find((m) => m.role === r)
                               ?.name ?? r}
                             )

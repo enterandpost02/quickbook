@@ -17,6 +17,7 @@ flowchart TB
     subgraph API["Next.js App Router Backend (/api/qbo)"]
         RouteHandler["GET / POST /api/qbo Route Handler"]
         CSVParser["Multi-Bank CSV Parser & Duplicate Detector (src/lib/csv-parser.ts)"]
+        Mailer["Employee Invitation Mailer from enterandpost02@gmail.com (src/lib/mailer.ts)"]
     end
 
     subgraph Engine["Core Double-Entry Accounting Engine (src/lib/qbo-store.ts)"]

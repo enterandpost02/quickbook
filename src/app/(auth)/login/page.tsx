@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import Link from "next/link";
 import { loginAction, type AuthActionState } from "../actions";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,14 @@ export default function LoginPage() {
     initialState
   );
 
+  const [email, setEmail] = useState("enterandpost02@gmail.com");
+  const [password, setPassword] = useState("Standard@1122");
+
+  function fillAdminCredentials() {
+    setEmail("enterandpost02@gmail.com");
+    setPassword("Standard@1122");
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -42,13 +50,34 @@ export default function LoginPage() {
             </div>
           )}
 
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 p-3 text-xs text-emerald-900">
+            <div className="flex items-center justify-between font-bold text-emerald-800 mb-1">
+              <span>QuickBooks Admin Credentials:</span>
+              <button
+                type="button"
+                onClick={fillAdminCredentials}
+                className="underline hover:text-emerald-950 font-semibold"
+              >
+                Auto-fill
+              </button>
+            </div>
+            <p className="font-mono text-[11px] text-emerald-700">
+              Email: <strong>enterandpost02@gmail.com</strong>
+            </p>
+            <p className="font-mono text-[11px] text-emerald-700">
+              Password: <strong>Standard@1122</strong>
+            </p>
+          </div>
+
           <div className="space-y-1.5">
             <Label htmlFor="email">Email address</Label>
             <Input
               id="email"
               name="email"
               type="email"
-              placeholder="ada@analyticalengine.co"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="enterandpost02@gmail.com"
               required
               autoComplete="email"
             />
@@ -60,6 +89,8 @@ export default function LoginPage() {
               id="password"
               name="password"
               type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
               required
               autoComplete="current-password"
@@ -68,8 +99,8 @@ export default function LoginPage() {
         </CardContent>
 
         <CardFooter className="flex flex-col space-y-3">
-          <Button type="submit" className="w-full" disabled={isPending}>
-            {isPending ? "Signing in..." : "Sign In"}
+          <Button type="submit" className="w-full bg-[#2CA01C] hover:bg-[#248217] text-white font-bold" disabled={isPending}>
+            {isPending ? "Signing in..." : "Sign In to QuickBooks"}
           </Button>
           <p className="text-center text-sm text-slate-600">
             New to QuickBoooks?{" "}

@@ -13,6 +13,8 @@ import {
 import {
   createSession,
   destroyCurrentSession,
+  ensureAdminUserInDb,
+  DEFAULT_ADMIN,
   hashPassword,
   requireAuth,
   slugifyOrganizationName,
@@ -111,6 +113,14 @@ export async function loginAction(
 
   const db = await getDb();
 
+  // If signing in as primary administrator, ensure user & organization records exist in DB
+  if (
+    email === DEFAULT_ADMIN.email.toLowerCase() &&
+    password === DEFAULT_ADMIN.password
+  ) {
+    await ensureAdminUserInDb();
+  }
+
   const [user] = await db
     .select()
     .from(users)
@@ -121,15 +131,32 @@ export async function loginAction(
     return { error: "Invalid email or password." };
   }
 
-  const memberships = await db
+  let memberships = await db
     .select()
     .from(organizationMembers)
     .where(eq(organizationMembers.userId, user.id))
     .limit(1);
 
-  const firstMembership = memberships[0];
+  let firstMembership = memberships[0];
   if (!firstMembership) {
-    return { error: "No organization is linked to this user account." };
+    // If user exists without membership, attach to first available org as owner
+    const [firstOrg] = await db.select().from(organizations).limit(1);
+    if (firstOrg) {
+      await db.insert(organizationMembers).values({
+        organizationId: firstOrg.id,
+        userId: user.id,
+        role: "owner",
+      });
+      firstMembership = {
+        id: crypto.randomUUID(),
+        organizationId: firstOrg.id,
+        userId: user.id,
+        role: "owner",
+        createdAt: new Date(),
+      };
+    } else {
+      return { error: "No organization is linked to this user account." };
+    }
   }
 
   await createSession(user.id, firstMembership.organizationId);

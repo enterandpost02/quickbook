@@ -108,3 +108,22 @@
   - Added **Test 19** in [`src/lib/__tests__/qbo-engine.test.ts`](../src/lib/__tests__/qbo-engine.test.ts) verifying that `wipeAllCompanyTransactions()` wipes all transactional records, resets every account balance to `$0.00`, preserves double-entry equilibrium, and confirms `createFreshCompanyData()` generates an empty company with all 31 standard accounts.
 - **Next.js 16 Production Build Verification for Vercel:**
   - Ran `npm run build` with Turbopack and verified successful static and dynamic page generation with zero prerendering or TypeScript errors.
+
+## Phase 13 — Administrator Credentials (`enterandpost02@gmail.com`), Employee Mailer & RBAC Automation
+- **Designated Primary Administrator Credentials:**
+  - Configured actual production admin account `enterandpost02@gmail.com` with password `Standard@1122` in [`src/lib/auth.ts`](../src/lib/auth.ts) and [`src/app/(auth)/actions.ts`](../src/app/(auth)/actions.ts).
+  - Implemented `ensureAdminUserInDb()` to automatically seed or update the user in PostgreSQL with salted scrypt password hashing and link them as `owner` to the primary organization.
+  - Enhanced [`src/app/(auth)/login/page.tsx`](../src/app/(auth)/login/page.tsx) with prefilled credentials and a 1-click "Auto-fill" admin credentials banner for effortless sign-in.
+  - Executed [`scripts/seed-admin.ts`](../scripts/seed-admin.ts) and verified live database user creation in Supabase PostgreSQL.
+- **Automated Employee Invitation Email Dispatcher (`src/lib/mailer.ts`):**
+  - Built transactional email module [`src/lib/mailer.ts`](../src/lib/mailer.ts) sending official invitations directly from `enterandpost02@gmail.com` (`"QuickBooks Online <enterandpost02@gmail.com>"`).
+  - Designed responsive HTML email template featuring Intuit QuickBooks branding, role descriptions (`Company Owner`, `Staff Bookkeeper`, `Accountant Read-Only`), and one-click direct sign-in links.
+  - Added support for live Gmail SMTP via `GMAIL_APP_PASSWORD` or `SMTP_PASS` with graceful fallback to logged simulated delivery if credentials are not yet configured.
+- **Team Management & Employee UI in AuditLogView:**
+  - Updated `AuditLogView` in [`src/components/qbo/qbo-views.tsx`](../src/components/qbo/qbo-views.tsx) with a prominent banner highlighting automated email dispatch from `enterandpost02@gmail.com`.
+  - Added `Send Invite Email` form action and individual `Resend Email` buttons on team member rows.
+  - Handled `invite_team_member` and `resend_invite_email` actions in [`src/app/api/qbo/route.ts`](../src/app/api/qbo/route.ts).
+- **Automated Test Suite Expansion (20/20 Passing Tests):**
+  - Added **Test 20** in [`src/lib/__tests__/qbo-engine.test.ts`](../src/lib/__tests__/qbo-engine.test.ts) verifying admin credentials matching, seeded owner presence, team member invite creation, email payload generation from `enterandpost02@gmail.com`, and read-only RBAC mutation blocking.
+- **Verified Production Build:**
+  - `npm run build` compiled all 8 static and dynamic routes (`/`, `/_not-found`, `/api/qbo`, `/dashboard`, `/login`, `/signup`) with 0 errors.

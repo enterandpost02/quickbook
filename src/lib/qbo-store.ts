@@ -1484,15 +1484,15 @@ export function createInitialSeedData(customCompanyName?: string): QboStoreData 
   const teamMembers: QboTeamMember[] = [
     {
       id: "tm-1",
-      name: "Craig Carlson",
-      email: "craig@craigslandscaping.com",
+      name: "Enter & Post Admin",
+      email: "enterandpost02@gmail.com",
       role: "owner",
       status: "Active",
     },
     {
       id: "tm-2",
       name: "Sarah Jenkins",
-      email: "sarah@craigslandscaping.com",
+      email: "sarah@enterandpost.com",
       role: "staff",
       status: "Active",
     },
@@ -1537,8 +1537,8 @@ export function createFreshCompanyData(companyName: string): QboStoreData {
     teamMembers: [
       {
         id: "tm-1",
-        name: "Business Owner",
-        email: "owner@company.com",
+        name: "Enter & Post Admin",
+        email: "enterandpost02@gmail.com",
         role: "owner",
         status: "Active",
       },
@@ -1621,10 +1621,17 @@ function appendAuditLog(
   amountCents?: number
 ): void {
   const store = getRawStore();
+  const activeUser = store.teamMembers.find(
+    (m) => m.role === store.activeRole
+  );
+  const userLabel = activeUser
+    ? `${activeUser.name} (${activeUser.role.toUpperCase()})`
+    : "Enter & Post Admin (OWNER)";
+
   store.auditLogs.unshift({
     id: `aud-${Date.now()}-${store.auditLogs.length}`,
     timestamp: new Date().toISOString(),
-    user: "Craig Carlson (Owner)",
+    user: userLabel,
     action,
     details,
     amountCents,

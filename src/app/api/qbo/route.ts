@@ -34,6 +34,7 @@ import {
   saveQboStoreFast,
   setActiveOrgCookieSafe,
 } from "@/lib/qbo-db";
+import { sendTeamInviteEmail } from "@/lib/mailer";
 
 export async function GET() {
   const { state } = await loadQboStoreFromDb();
@@ -159,8 +160,40 @@ export async function POST(request: Request) {
         break;
       }
       case "invite_team_member": {
-        inviteTeamMember(payload);
-        break;
+        const member = inviteTeamMember(payload);
+        const origin = new URL(request.url).origin;
+        const mailResult = await sendTeamInviteEmail({
+          to: payload.email,
+          recipientName: payload.name,
+          role: payload.role,
+          companyName: getRawStore().companyName,
+          inviterName: "Enter & Post Admin",
+          inviterEmail: "enterandpost02@gmail.com",
+          appUrl: origin,
+        });
+        const state = saveQboStoreFast(organizationId);
+        return NextResponse.json({ ...state, inviteEmailResult: mailResult });
+      }
+      case "resend_invite_email": {
+        const rawStore = getRawStore();
+        const member = rawStore.teamMembers.find(
+          (m) => m.id === payload.memberId || m.email === payload.email
+        );
+        if (!member) {
+          throw new Error("Team member not found");
+        }
+        const origin = new URL(request.url).origin;
+        const mailResult = await sendTeamInviteEmail({
+          to: member.email,
+          recipientName: member.name,
+          role: member.role,
+          companyName: rawStore.companyName,
+          inviterName: "Enter & Post Admin",
+          inviterEmail: "enterandpost02@gmail.com",
+          appUrl: origin,
+        });
+        const state = saveQboStoreFast(organizationId);
+        return NextResponse.json({ ...state, inviteEmailResult: mailResult });
       }
       case "reset_demo": {
         resetQboStore();

@@ -25,6 +25,8 @@
 - [x] **Bank Feed Deposit & Outflow Matching to Open Invoices & Bills:** Match imported bank CSV rows directly against open Customer Invoices (`A/R 1100`) or open Vendor Bills (`A/P 2000`) in one click without double-counting revenue or expenses.
 - [x] **Create New Customer & New Vendor UI Modals:** Create new Customer and Vendor profiles directly from `+ New` Quick Create and the Sales/Expenses tabs.
 - [x] **User Profile & Session Header Menu:** Top-right user session menu linking active company role switching with `/login` and `/signup`.
+- [x] **Primary Administrator Account & Auto-Seeding:** Configured production user `enterandpost02@gmail.com` with password `Standard@1122` and auto-seeding.
+- [x] **Automated Employee Invitation Mailer:** Branded invitation emails dispatched from `enterandpost02@gmail.com` via Nodemailer / Gmail SMTP.
 - [ ] **Receipt File Upload & Attachment Preview:** Attach PDF/image receipts to Expenses and Vendor Bills.
 - [ ] **Recurring Invoices & Scheduled Reminders:** Configure recurring monthly/weekly invoice templates.
 

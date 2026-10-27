@@ -16,6 +16,81 @@ import {
 const SESSION_COOKIE_NAME = "qb_session";
 const SESSION_DURATION_DAYS = 30;
 
+export const DEFAULT_ADMIN = {
+  email: "enterandpost02@gmail.com",
+  password: "Standard@1122",
+  fullName: "Enter & Post Admin",
+};
+
+export async function ensureAdminUserInDb() {
+  const db = await getDb();
+  const email = DEFAULT_ADMIN.email;
+  const password = DEFAULT_ADMIN.password;
+  const fullName = DEFAULT_ADMIN.fullName;
+  const passwordHash = hashPassword(password);
+
+  const existingUsers = await db
+    .select()
+    .from(users)
+    .where(eq(users.email, email))
+    .limit(1);
+
+  let adminUser = existingUsers[0];
+  if (!adminUser) {
+    const [inserted] = await db
+      .insert(users)
+      .values({
+        email,
+        fullName,
+        passwordHash,
+      })
+      .returning();
+    adminUser = inserted;
+  } else if (!verifyPassword(password, adminUser.passwordHash)) {
+    // Update password hash if it ever differed
+    await db
+      .update(users)
+      .set({ passwordHash })
+      .where(eq(users.id, adminUser.id));
+  }
+
+  // Ensure an organization exists
+  let [primaryOrg] = await db.select().from(organizations).limit(1);
+  if (!primaryOrg) {
+    const [newOrg] = await db
+      .insert(organizations)
+      .values({
+        name: "Enter & Post QuickBooks",
+        slug: slugifyOrganizationName("Enter & Post"),
+        baseCurrency: "USD",
+      })
+      .returning();
+    primaryOrg = newOrg;
+  }
+
+  // Ensure membership exists with owner role
+  const existingMembership = await db
+    .select()
+    .from(organizationMembers)
+    .where(
+      and(
+        eq(organizationMembers.userId, adminUser.id),
+        eq(organizationMembers.organizationId, primaryOrg.id)
+      )
+    )
+    .limit(1);
+
+  if (existingMembership.length === 0) {
+    await db.insert(organizationMembers).values({
+      organizationId: primaryOrg.id,
+      userId: adminUser.id,
+      role: "owner",
+    });
+  }
+
+  return { user: adminUser, org: primaryOrg };
+}
+
 export function hashPassword(password: string): string {
   const salt = crypto.randomBytes(16).toString("hex");
   const derivedKey = crypto.scryptSync(password, salt, 64).toString("hex");

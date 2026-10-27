@@ -12,12 +12,14 @@ import {
   History,
   Landmark,
   Lock,
+  Mail,
   Package,
   Plus,
   Receipt,
   RotateCcw,
   Scale,
   Search,
+  Send,
   ShieldAlert,
   Sparkles,
   Unlock,
@@ -4007,6 +4009,21 @@ export function AuditLogView({ state, runAction }: ViewProps) {
 
         {subTab === "teams" && (
           <div className="p-5 space-y-5">
+            <div className="flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50/70 p-3.5 text-xs text-emerald-950">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#2CA01C] text-white">
+                <Mail className="h-4 w-4" />
+              </div>
+              <div>
+                <p className="font-bold text-emerald-900">
+                  Automated Employee Invitations &amp; RBAC Control
+                </p>
+                <p className="text-[11px] text-emerald-700">
+                  When you invite a new employee or accountant, an official onboarding email is dispatched directly from{" "}
+                  <strong className="font-mono text-emerald-950">enterandpost02@gmail.com</strong> with their assigned role and immediate access link.
+                </p>
+              </div>
+            </div>
+
             <form
               onSubmit={async (e) => {
                 e.preventDefault();
@@ -4018,48 +4035,54 @@ export function AuditLogView({ state, runAction }: ViewProps) {
                     email: inviteEmail,
                     role: inviteRole,
                   },
-                  `Invited ${inviteName} (${inviteRole}) to ${state.companyName}`
+                  `Invitation email dispatched to ${inviteEmail} from enterandpost02@gmail.com (${inviteRole.toUpperCase()} permissions)`
                 );
                 setInviteName("");
                 setInviteEmail("");
               }}
-              className="grid grid-cols-1 sm:grid-cols-4 gap-3 rounded-lg bg-slate-50 p-4 border border-slate-200"
+              className="space-y-2 rounded-lg bg-slate-50 p-4 border border-slate-200"
             >
-              <input
-                type="text"
-                value={inviteName}
-                onChange={(e) => setInviteName(e.target.value)}
-                placeholder="Full Name (e.g. Jane Doe, CPA)"
-                required
-                className="rounded border border-slate-300 bg-white px-3 py-1.5 text-xs"
-              />
-              <input
-                type="email"
-                value={inviteEmail}
-                onChange={(e) => setInviteEmail(e.target.value)}
-                placeholder="Email address"
-                required
-                className="rounded border border-slate-300 bg-white px-3 py-1.5 text-xs"
-              />
-              <select
-                value={inviteRole}
-                onChange={(e) =>
-                  setInviteRole(
-                    e.target.value as "accountant" | "staff" | "owner"
-                  )
-                }
-                className="rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold"
-              >
-                <option value="accountant">Accountant (Read-Only Audit)</option>
-                <option value="staff">Staff Bookkeeper</option>
-                <option value="owner">Company Owner</option>
-              </select>
-              <button
-                type="submit"
-                className="rounded-full bg-[#2CA01C] px-4 py-1.5 text-xs font-bold text-white hover:bg-[#248217]"
-              >
-                + Invite User
-              </button>
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                <input
+                  type="text"
+                  value={inviteName}
+                  onChange={(e) => setInviteName(e.target.value)}
+                  placeholder="Employee Full Name (e.g. Jane Doe)"
+                  required
+                  className="rounded border border-slate-300 bg-white px-3 py-2 text-xs"
+                />
+                <input
+                  type="email"
+                  value={inviteEmail}
+                  onChange={(e) => setInviteEmail(e.target.value)}
+                  placeholder="Employee Email Address"
+                  required
+                  className="rounded border border-slate-300 bg-white px-3 py-2 text-xs"
+                />
+                <select
+                  value={inviteRole}
+                  onChange={(e) =>
+                    setInviteRole(
+                      e.target.value as "accountant" | "staff" | "owner"
+                    )
+                  }
+                  className="rounded border border-slate-300 bg-white px-2.5 py-2 text-xs font-semibold text-slate-800"
+                >
+                  <option value="accountant">Accountant (Read-Only Audit)</option>
+                  <option value="staff">Staff Bookkeeper (Standard)</option>
+                  <option value="owner">Company Owner (Full Admin)</option>
+                </select>
+                <button
+                  type="submit"
+                  className="inline-flex items-center justify-center gap-1.5 rounded-full bg-[#2CA01C] px-4 py-2 text-xs font-bold text-white hover:bg-[#248217] transition-colors"
+                >
+                  <Send className="h-3.5 w-3.5" />
+                  Send Invite Email
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-500">
+                Sender: <span className="font-semibold text-slate-700">enterandpost02@gmail.com</span> · The invited user will receive a branded invitation with one-click sign-in.
+              </p>
             </form>
 
             <table className="w-full text-left text-xs">
@@ -4069,24 +4092,70 @@ export function AuditLogView({ state, runAction }: ViewProps) {
                   <th className="px-4 py-3">Email</th>
                   <th className="px-4 py-3">Role &amp; Permissions</th>
                   <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {state.teamMembers.map((m) => (
-                  <tr key={m.id}>
+                  <tr key={m.id} className="hover:bg-slate-50/50">
                     <td className="px-4 py-3 font-semibold text-slate-900">
                       {m.name}
+                      {m.email === "enterandpost02@gmail.com" && (
+                        <span className="ml-2 inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-[#2CA01C]">
+                          Admin
+                        </span>
+                      )}
                     </td>
-                    <td className="px-4 py-3 text-slate-600">{m.email}</td>
+                    <td className="px-4 py-3 text-slate-600 font-mono text-[11px]">
+                      {m.email}
+                    </td>
                     <td className="px-4 py-3">
-                      <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-bold uppercase text-slate-700">
+                      <span
+                        className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase ${
+                          m.role === "owner"
+                            ? "bg-emerald-50 text-[#2CA01C] border border-emerald-200"
+                            : m.role === "staff"
+                            ? "bg-sky-50 text-[#0077C5] border border-sky-200"
+                            : "bg-slate-100 text-slate-700 border border-slate-200"
+                        }`}
+                      >
                         {m.role === "accountant"
                           ? "Accountant (Read-Only)"
-                          : m.role}
+                          : m.role === "staff"
+                          ? "Staff Bookkeeper"
+                          : "Company Owner"}
                       </span>
                     </td>
-                    <td className="px-4 py-3 font-semibold text-[#2CA01C]">
-                      {m.status}
+                    <td className="px-4 py-3">
+                      {m.status === "Invited" ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-200 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+                          <Mail className="h-3 w-3" />
+                          Invited (Email Sent)
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[11px] font-semibold text-[#2CA01C]">
+                          <Check className="h-3 w-3" />
+                          Active
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      {m.email !== "enterandpost02@gmail.com" && (
+                        <button
+                          onClick={() =>
+                            runAction(
+                              "resend_invite_email",
+                              { memberId: m.id, email: m.email },
+                              `Resent onboarding invitation to ${m.email} from enterandpost02@gmail.com`
+                            )
+                          }
+                          className="inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
+                          title="Resend invitation email from enterandpost02@gmail.com"
+                        >
+                          <Mail className="h-3 w-3 text-slate-500" />
+                          Resend Email
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}

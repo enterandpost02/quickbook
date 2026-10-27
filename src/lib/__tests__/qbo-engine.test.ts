@@ -14,6 +14,7 @@ import {
   formatPostalAddress,
   getComputedQboState,
   importBankCsvRows,
+  inviteTeamMember,
   matchBankTransaction,
   payVendorBill,
   postJournalEntry,
@@ -36,6 +37,8 @@ import {
   parseCsvTextToPreview,
 } from "../csv-parser";
 import { BANK_CSV_PRESETS } from "../sample-bank-csvs";
+import { sendTeamInviteEmail, DEFAULT_SENDER_EMAIL } from "../mailer";
+import { DEFAULT_ADMIN, hashPassword, verifyPassword } from "../auth";
 
 describe("QuickBooks Double-Entry Accounting Engine & CSV Suite", () => {
   beforeEach(() => {
@@ -707,5 +710,69 @@ describe("QuickBooks Double-Entry Accounting Engine & CSV Suite", () => {
     assert.equal(fresh.invoices.length, 0);
     assert.equal(fresh.expenses.length, 0);
     assert.equal(fresh.accounts.length, 31);
+  });
+
+  it("20. Authentication & Employee Mailer: Admin credentials, team invite, and email dispatched from enterandpost02@gmail.com", async () => {
+    // 1. Verify default admin credentials match requirements exactly
+    assert.equal(DEFAULT_ADMIN.email, "enterandpost02@gmail.com");
+    assert.equal(DEFAULT_ADMIN.password, "Standard@1122");
+    const hash = hashPassword(DEFAULT_ADMIN.password);
+    assert.equal(verifyPassword("Standard@1122", hash), true);
+    assert.equal(verifyPassword("WrongPassword", hash), false);
+
+    // 2. Verify seeded store has enterandpost02@gmail.com as primary owner
+    const state = getComputedQboState();
+    const adminMember = state.teamMembers.find(
+      (m) => m.email === "enterandpost02@gmail.com"
+    );
+    assert.ok(adminMember, "Owner member with enterandpost02@gmail.com must exist");
+    assert.equal(adminMember.role, "owner");
+    assert.equal(adminMember.status, "Active");
+
+    // 3. Invite a new employee
+    const newMember = inviteTeamMember({
+      name: "Marcus Vance",
+      email: "marcus.vance@example.com",
+      role: "staff",
+    });
+    assert.equal(newMember.name, "Marcus Vance");
+    assert.equal(newMember.email, "marcus.vance@example.com");
+    assert.equal(newMember.role, "staff");
+    assert.equal(newMember.status, "Invited");
+
+    const updatedState = getComputedQboState();
+    assert.ok(
+      updatedState.teamMembers.some((m) => m.email === "marcus.vance@example.com")
+    );
+
+    // 4. Test email dispatcher sending to new employee from enterandpost02@gmail.com
+    assert.equal(DEFAULT_SENDER_EMAIL, "enterandpost02@gmail.com");
+    const mailResult = await sendTeamInviteEmail({
+      to: "marcus.vance@example.com",
+      recipientName: "Marcus Vance",
+      role: "staff",
+      companyName: updatedState.companyName,
+      inviterName: "Enter & Post Admin",
+      inviterEmail: "enterandpost02@gmail.com",
+      appUrl: "https://quickbook-phi.vercel.app",
+    });
+
+    assert.equal(mailResult.success, true);
+    assert.equal(mailResult.from, "enterandpost02@gmail.com");
+    assert.equal(mailResult.to, "marcus.vance@example.com");
+    assert.ok(mailResult.subject.includes("invited to join"));
+    assert.ok(mailResult.previewSnippet.includes("enterandpost02@gmail.com"));
+
+    // 5. Verify RBAC prevents Accountant from inviting or altering records
+    setActiveRole("accountant");
+    assert.throws(() => {
+      inviteTeamMember({
+        name: "Hacker",
+        email: "hacker@example.com",
+        role: "owner",
+      });
+    }, /Permission denied: Accountant role is read-only/);
+
+    setActiveRole("owner");
   });
 });

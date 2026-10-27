@@ -32,6 +32,10 @@
 - **Rule 9 — Production Data Reset & Chart of Accounts Preservation:**
   - Wiping company transactions (`wipeAllCompanyTransactions`) must clear all transactional data (journal entries, lines, bank feeds, invoices, bills, expenses, estimates, reconciliations, customers, and vendors) while strictly preserving all 31 standard Chart of Accounts.
   - Every account's `balanceCents` and `bankBalanceCents` must be reset to exactly `0`, leaving `Total Assets ($0.00) === Total Liabilities + Equity ($0.00)`.
+- **Rule 10 — Production Authentication & Employee Invitation Delivery:**
+  - The primary administrator email is `enterandpost02@gmail.com` with password `Standard@1122`, stored in PostgreSQL with salted scrypt hashing.
+  - All employee and accountant invitation emails must be dispatched from `enterandpost02@gmail.com` (`DEFAULT_SENDER_EMAIL`) with role permissions and direct sign-in links.
+  - If live SMTP credentials (`GMAIL_APP_PASSWORD` or `SMTP_PASS`) are set, delivery executes via Gmail SMTP; otherwise, delivery falls back gracefully to a logged simulated delivery with invitation links preserved so no action fails.
 
 ## 2. Security & Multi-Tenancy Rules
 - **Organization Isolation (`organization_id`):**

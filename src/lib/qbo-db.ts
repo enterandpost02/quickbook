@@ -19,6 +19,7 @@ import {
   type ComputedQboState,
   type QboStoreData,
 } from "@/lib/qbo-store";
+import { ensureAdminUserInDb } from "@/lib/auth";
 
 const DEFAULT_ORG_SLUG = "craigs-design-and-landscaping";
 export const ACTIVE_ORG_COOKIE = "qbo_active_org_id";
@@ -93,6 +94,11 @@ async function ensureCacheInitialized(): Promise<void> {
   }
 
   globalCache.initPromise = (async () => {
+    try {
+      await ensureAdminUserInDb();
+    } catch (authInitErr) {
+      console.warn("[AuthInit] Warning: Could not ensure default admin in DB:", authInitErr);
+    }
     const db = await getDb();
     const [allOrgs, allSnapshots] = await Promise.all([
       db.select().from(organizations).orderBy(asc(organizations.createdAt)),
