@@ -74,3 +74,22 @@
   - Added an interactive User Session & Company Profile dropdown on the top-right header avatar in [`src/components/qbo/qbo-workspace.tsx`](../src/components/qbo/qbo-workspace.tsx) showing active user details, role switcher (`Owner`, `Bookkeeper`, `Accountant`), and direct links to `/login` and `/signup`.
 - **Expanded Automated Test Suite (16/16 Passing Tests):**
   - Added unit tests 11–16 in [`src/lib/__tests__/qbo-engine.test.ts`](../src/lib/__tests__/qbo-engine.test.ts) verifying integer-cent Sales Tax math, partial & full Bank Feed Invoice/Bill matching, Cash vs. Accrual basis & Date-Range report balance invariants, Customer/Vendor creation, Bank & Credit Card Reconciliation (`Difference === $0.00` enforcement), dynamic Bank Balance vs. QuickBooks GL Balance math, and Sub-Ledger (`arAging` / `apAging`) vs. General Ledger (`1100 A/R` / `2000 A/P`) equality before and after reversals.
+
+## Phase 11 — Reports Center Comparison, Top Global Search & Enhanced Customer/Vendor Profiles
+- **Reports Center Period Comparison & Multi-Dimensional Filtering:**
+  - Added **Period Comparison Mode** (`None`, `Previous Period (PP)`, `Previous Year (PY)`, `Custom Comparison Range`) supporting month-aware and day-aligned shift calculations (`computeComparisonRange` in [`src/lib/qbo-store.ts`](../src/lib/qbo-store.ts)).
+  - Renders 4 comparative columns on Profit & Loss and Balance Sheet: **Current Period ($)**, **Prior Period ($)**, **$ Change** (color-coded for income vs expense), and **% Change** (`+X.X%` / `—`).
+  - Added Trial Balance comparison view showing Current Debit/Credit alongside Prior Debit/Credit.
+  - Added filter options: Preset ranges (`All Dates`, `October 2026`, `September 2026`, `Q3 2026`, `Q4 2026`, `Year-to-Date 2026`), custom date pickers, Accrual vs Cash basis toggle, Entity/Payee filter (filtering by customer/vendor while preserving `Debits === Credits` journal equality), General Ledger Account filter, and **Hide zero-balance rows** toggle.
+  - Enhanced **Export CSV** to automatically export comparative columns (`Current`, `Prior`, `Dollar Change`, `Percent Change`) when comparison mode is active.
+- **Top Global QuickBooks Search Bar:**
+  - Built universal search engine [`src/lib/qbo-search.ts`](../src/lib/qbo-search.ts) indexing all 9 entity types: Customers, Vendors, Invoices, Estimates, Expenses & Bills, Bank Transactions, Accounts (COA), Journal Entries, and Products & Services.
+  - Supports multi-term `AND` semantics, prefix and word matching, invoice/estimate number aliases (`INV-1001`, `Invoice #1001`, `#1001`, `1001`), and exact integer-cent dollar amount matching (`$1,250.00`, `425`, `90.50`).
+  - Built sticky top header search component in [`src/components/qbo/qbo-workspace.tsx`](../src/components/qbo/qbo-workspace.tsx) with keyboard shortcuts (`Ctrl+K`, `Cmd+K`, `/` to focus, `Escape` to close), categorized results dropdown with entity counts and formatted amount pills, and one-click navigation to the relevant tab.
+- **Enhanced Customer & Vendor Profiles:**
+  - Updated `QboCustomer` and `QboVendor` interfaces with optional `firstName`, `lastName`, `company`, `taxId` (EIN/SSN/1099), and structured `address` (`street`, `city`, `state`, `postalCode`, `country`).
+  - Made `defaultExpenseAccountId` optional on `QboVendor` (allowing `"— Optional / Select per transaction —"`).
+  - Updated `CreateCustomerModal` and `CreateVendorModal` in [`src/components/qbo/qbo-modals.tsx`](../src/components/qbo/qbo-modals.tsx) with comprehensive form inputs for first/last name, display name derivation, tax ID, email, phone, optional default category, and structured street/city/state/zip addresses.
+  - Updated Customers and Vendors directory tables in [`src/components/qbo/qbo-views.tsx`](../src/components/qbo/qbo-views.tsx) to display Contact Name, Company, Tax ID badges, Default Category pills, formatted address, and contact info.
+- **Expanded Automated Test Suite (18/18 Passing Tests):**
+  - Added Tests 17 and 18 in [`src/lib/__tests__/qbo-engine.test.ts`](../src/lib/__tests__/qbo-engine.test.ts) verifying comparison date range shifting (whole month and arbitrary days), comparative reports variance math, double-entry invariants, customer/vendor profile fields, and global search query resolution across all record types.

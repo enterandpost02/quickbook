@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   categorizeAllSuggested,
   categorizeBankTransaction,
+  computeComparisonRange,
   computeReportsForFilter,
   convertEstimateToInvoice,
   createCustomer,
@@ -10,6 +11,7 @@ import {
   createTransfer,
   createVendor,
   finishReconciliation,
+  formatPostalAddress,
   getComputedQboState,
   importBankCsvRows,
   matchBankTransaction,
@@ -22,6 +24,10 @@ import {
   setActiveRole,
   setPeriodLockDate,
 } from "../qbo-store";
+import {
+  searchQboState,
+  parseSearchAmountCents,
+} from "../qbo-search";
 import {
   computeRowAmountCents,
   normalizeDateString,
@@ -518,5 +524,150 @@ describe("QuickBooks Double-Entry Accounting Engine & CSV Suite", () => {
     const cashReports = computeReportsForFilter(afterRev, { basis: "cash" });
     assert.equal(cashReports.balanceSheet.isBalanced, true);
     assert.equal(cashReports.trialBalance.isBalanced, true);
+  });
+
+  it("17. Reports Center: Period Comparison (PP & PY) and Entity/GL filtering maintain 100% precision and invariants", () => {
+    // 1. Whole month comparison calculation (October 2026 -> September 2026 PP, October 2025 PY)
+    const pp = computeComparisonRange("2026-10-01", "2026-10-31", "previous_period");
+    assert.equal(pp.startDate, "2026-09-01");
+    assert.equal(pp.endDate, "2026-09-30");
+
+    const py = computeComparisonRange("2026-10-01", "2026-10-31", "previous_year");
+    assert.equal(py.startDate, "2025-10-01");
+    assert.equal(py.endDate, "2025-10-31");
+
+    // 2. Arbitrary multi-day range shifts exactly by range length
+    const tenDays = computeComparisonRange("2026-10-11", "2026-10-20", "previous_period");
+    assert.equal(tenDays.startDate, "2026-10-01");
+    assert.equal(tenDays.endDate, "2026-10-10");
+
+    // 3. Open-ended ranges
+    const openEnd = computeComparisonRange(undefined, "2026-10-31", "previous_year");
+    assert.equal(openEnd.endDate, "2025-10-31");
+
+    // 4. Period Comparison Reports Evaluation
+    const state = getComputedQboState();
+    const curReports = computeReportsForFilter(state, {
+      startDate: "2026-10-01",
+      endDate: "2026-10-31",
+    });
+    const priorReports = computeReportsForFilter(state, {
+      startDate: pp.startDate,
+      endDate: pp.endDate,
+    });
+
+    // Invariants hold across both periods
+    assert.equal(curReports.balanceSheet.isBalanced, true);
+    assert.equal(curReports.trialBalance.isBalanced, true);
+    assert.equal(priorReports.balanceSheet.isBalanced, true);
+    assert.equal(priorReports.trialBalance.isBalanced, true);
+
+    // Variance math is exact integer-cents
+    const incomeCur = curReports.profitAndLoss.totalIncomeCents;
+    const incomePrior = priorReports.profitAndLoss.totalIncomeCents;
+    const variance = incomeCur - incomePrior;
+    assert.equal(typeof variance, "number");
+    assert.ok(Number.isSafeInteger(variance));
+
+    // 5. Entity Filter: filter by Redwood Tech Campus
+    const entityReports = computeReportsForFilter(state, {
+      entityName: "Redwood Tech Campus",
+    });
+    // Double entry debits equal credits remains valid under entity filter
+    assert.equal(entityReports.trialBalance.isBalanced, true);
+    assert.equal(
+      entityReports.trialBalance.totalDebitsCents,
+      entityReports.trialBalance.totalCreditsCents
+    );
+  });
+
+  it("18. Customer & Vendor profile enhancements and Top Global Search Engine", () => {
+    // 1. Create customer with optional fields: firstName, lastName, taxId, address
+    const cust = createCustomer({
+      firstName: "Eleanor",
+      lastName: "Vance",
+      company: "Hill House Design Co",
+      taxId: "12-3456789",
+      email: "eleanor@hillhouse.example",
+      phone: "(415) 555-0199",
+      address: {
+        street: "450 Sutter St, Suite 1200",
+        city: "San Francisco",
+        state: "CA",
+        postalCode: "94108",
+        country: "USA",
+      },
+    });
+    assert.equal(cust.name, "Eleanor Vance");
+    assert.equal(cust.company, "Hill House Design Co");
+    assert.equal(cust.taxId, "12-3456789");
+    assert.equal(cust.address?.postalCode, "94108");
+    assert.equal(
+      formatPostalAddress(cust.address),
+      "450 Sutter St, Suite 1200, San Francisco, CA 94108, USA"
+    );
+
+    // 2. Create vendor with optional fields, no default category (optional)
+    const vendor = createVendor({
+      name: "Apex Precision Tools",
+      firstName: "Marcus",
+      lastName: "Brody",
+      taxId: "98-7654321",
+      email: "orders@apexprecision.example",
+      phone: "(408) 555-0144",
+      defaultExpenseAccountId: undefined, // Optional!
+      address: {
+        street: "880 N 1st St",
+        city: "San Jose",
+        state: "CA",
+        postalCode: "95112",
+      },
+    });
+    assert.equal(vendor.name, "Apex Precision Tools");
+    assert.equal(vendor.taxId, "98-7654321");
+    assert.equal(vendor.defaultExpenseAccountId, undefined);
+    assert.equal(
+      formatPostalAddress(vendor.address),
+      "880 N 1st St, San Jose, CA 95112"
+    );
+
+    // 3. Amount parser tests
+    assert.equal(parseSearchAmountCents("$1,250.00"), 125000);
+    assert.equal(parseSearchAmountCents("425"), 42500);
+    assert.equal(parseSearchAmountCents("90.50"), 9050);
+    assert.equal(parseSearchAmountCents("invalid-dollar"), null);
+
+    // 4. Global Search engine indexing
+    const state = getComputedQboState();
+
+    // Query by exact invoice number
+    const invRes = searchQboState(state, "INV-1001");
+    assert.ok(invRes.length > 0);
+    assert.equal(invRes[0].kind, "invoice");
+    assert.ok(invRes[0].title.includes("1001"));
+
+    // Query by customer name
+    const custRes = searchQboState(state, "Amy");
+    assert.ok(custRes.some((r) => r.kind === "customer" && r.title.includes("Amy")));
+
+    // Query by created customer name
+    const eleanorRes = searchQboState(state, "Eleanor");
+    assert.ok(eleanorRes.some((r) => r.kind === "customer" && r.title.includes("Eleanor Vance")));
+
+    // Query by vendor name
+    const venRes = searchQboState(state, "Tania");
+    assert.ok(venRes.some((r) => r.kind === "vendor" && r.title.includes("Tania")));
+
+    // Query by created vendor name
+    const apexRes = searchQboState(state, "Apex");
+    assert.ok(apexRes.some((r) => r.kind === "vendor" && r.title.includes("Apex Precision")));
+
+    // Query by GL account code or name
+    const acctRes = searchQboState(state, "1000");
+    assert.ok(acctRes.some((r) => r.kind === "account" && r.title.includes("1000")));
+
+    // Query by dollar amount
+    const amtRes = searchQboState(state, "$1,250.00");
+    assert.ok(amtRes.some((r) => r.amountCents === 125000));
   });
 });

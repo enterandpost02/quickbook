@@ -24,6 +24,11 @@
   - **Sub-Ledger vs. General Ledger:** Open Invoices (`arAging.totalCents` / `openInvoicesCents`) must always equal `1100 Accounts Receivable` GL balance, and Open Vendor Bills (`apAging.totalCents` / `openBillsCents`) must always equal `2000 Accounts Payable` GL balance, including after `reverseJournalEntry()` operations.
   - **Bank Balance vs. QuickBooks Balance:** `bankBalanceCents` is dynamically computed from `balanceCents` plus pending `"for_review"` bank feed items (`+pending` for debit-normal Bank accounts, `-pending` for credit-normal Credit Card accounts) so `bankBalanceCents === balanceCents` whenever `forReviewCount === 0`.
   - **Reconciliation Zero-Difference Guard:** `finishReconciliation()` enforces `clearedBalanceCents === endingBalanceCents` (`Difference === $0.00`) for both debit-normal Bank accounts and credit-normal Credit Card accounts.
+- **Rule 8 — Period Comparison & Multi-Entity Search Integrity:**
+  - Reports Period Comparison (`computeComparisonRange`) must support both month-aligned boundary shifting and arbitrary day-range shifting with whole-month awareness.
+  - Comparative report variances (`diffCents = current - prior`) must use exact integer subtraction. Percentage changes must handle division-by-zero safely (`"—"` when prior period is $0.00).
+  - Filtering reports by `entityName` filters journal transactions at the entry level, guaranteeing that `Debits === Credits` is preserved in every filtered view.
+  - Global Search (`searchQboState`) must parse exact currency formats (`$1,250.00`, `425`, `90.50`) into integer cents and match across all 9 entity types with multi-term `AND` semantics and alias awareness.
 
 ## 2. Security & Multi-Tenancy Rules
 - **Organization Isolation (`organization_id`):**

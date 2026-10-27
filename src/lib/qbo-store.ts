@@ -99,20 +99,38 @@ export interface QboCategorizationRule {
   payeeName?: string;
 }
 
+export interface QboPostalAddress {
+  street?: string;
+  city?: string;
+  state?: string;
+  postalCode?: string;
+  country?: string;
+}
+
 export interface QboCustomer {
   id: string;
-  name: string;
+  name: string; // Display name (required)
   company: string;
   email: string;
   phone: string;
+  firstName?: string;
+  lastName?: string;
+  taxId?: string;
+  address?: QboPostalAddress;
 }
 
 export interface QboVendor {
   id: string;
-  name: string;
+  name: string; // Display name (required)
   email: string;
   phone: string;
-  defaultExpenseAccountId: string;
+  company?: string;
+  firstName?: string;
+  lastName?: string;
+  taxId?: string;
+  address?: QboPostalAddress;
+  /** Optional default expense category; when unset, the category is chosen per transaction. */
+  defaultExpenseAccountId?: string;
 }
 
 export interface QboProductService {
@@ -1720,6 +1738,122 @@ export interface ReportFilterOptions {
   basis?: "accrual" | "cash";
   startDate?: string;
   endDate?: string;
+  /**
+   * Customer / Vendor / Payee filter. Whole journal entries are kept when any of their
+   * lines references this name, so filtered reports still satisfy Debits === Credits.
+   */
+  entityName?: string;
+  /** Restricts the General Ledger report to a single account. */
+  accountId?: string;
+}
+
+export type ReportComparisonMode = "previous_period" | "previous_year";
+
+function parseIsoDateUtc(iso: string): Date {
+  return new Date(`${iso}T00:00:00Z`);
+}
+
+function formatIsoDateUtc(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+function lastDayOfMonthUtc(year: number, monthIndex: number): number {
+  return new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate();
+}
+
+/**
+ * Computes the comparison date range for a report period.
+ * - previous_year: same dates one year earlier (Feb 29 clamps to Feb 28).
+ * - previous_period: the immediately preceding range of equal length. Whole-month ranges
+ *   (1st → last day of a month) shift by whole calendar months so month lengths are respected.
+ */
+export function computeComparisonRange(
+  startDate?: string,
+  endDate?: string,
+  mode: ReportComparisonMode = "previous_period"
+): { startDate?: string; endDate?: string } {
+  if (!startDate && !endDate) {
+    return { startDate: undefined, endDate: undefined };
+  }
+
+  const shiftMonths = (d: Date, months: number, clampToMonthEnd: boolean) => {
+    const y = d.getUTCFullYear();
+    const m = d.getUTCMonth() + months;
+    const targetYear = y + Math.floor(m / 12);
+    const targetMonth = ((m % 12) + 12) % 12;
+    const maxDay = lastDayOfMonthUtc(targetYear, targetMonth);
+    const day = clampToMonthEnd ? maxDay : Math.min(d.getUTCDate(), maxDay);
+    return new Date(Date.UTC(targetYear, targetMonth, day));
+  };
+
+  // Open-ended end date only
+  if (!startDate && endDate) {
+    const end = parseIsoDateUtc(endDate);
+    if (Number.isNaN(end.getTime())) {
+      throw new Error("Invalid end date provided for comparison.");
+    }
+    const endIsMonthEnd =
+      end.getUTCDate() === lastDayOfMonthUtc(end.getUTCFullYear(), end.getUTCMonth());
+    const shiftedEnd =
+      mode === "previous_year"
+        ? shiftMonths(end, -12, endIsMonthEnd)
+        : shiftMonths(end, -1, endIsMonthEnd);
+    return { startDate: undefined, endDate: formatIsoDateUtc(shiftedEnd) };
+  }
+
+  // Open-ended start date only
+  if (startDate && !endDate) {
+    const start = parseIsoDateUtc(startDate);
+    if (Number.isNaN(start.getTime())) {
+      throw new Error("Invalid start date provided for comparison.");
+    }
+    const shiftedStart =
+      mode === "previous_year"
+        ? shiftMonths(start, -12, false)
+        : shiftMonths(start, -1, false);
+    return { startDate: formatIsoDateUtc(shiftedStart), endDate: undefined };
+  }
+
+  const start = parseIsoDateUtc(startDate!);
+  const end = parseIsoDateUtc(endDate!);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start > end) {
+    throw new Error("Comparison requires a valid start date on or before the end date.");
+  }
+
+  if (mode === "previous_year") {
+    const endIsMonthEnd =
+      end.getUTCDate() === lastDayOfMonthUtc(end.getUTCFullYear(), end.getUTCMonth());
+    return {
+      startDate: formatIsoDateUtc(shiftMonths(start, -12, false)),
+      endDate: formatIsoDateUtc(shiftMonths(end, -12, endIsMonthEnd)),
+    };
+  }
+
+  const isWholeMonthRange =
+    start.getUTCDate() === 1 &&
+    end.getUTCDate() === lastDayOfMonthUtc(end.getUTCFullYear(), end.getUTCMonth());
+
+  if (isWholeMonthRange) {
+    const monthCount =
+      (end.getUTCFullYear() - start.getUTCFullYear()) * 12 +
+      (end.getUTCMonth() - start.getUTCMonth()) +
+      1;
+    const prevStart = shiftMonths(start, -monthCount, false);
+    const prevEnd = new Date(start.getTime() - 24 * 60 * 60 * 1000);
+    return {
+      startDate: formatIsoDateUtc(prevStart),
+      endDate: formatIsoDateUtc(prevEnd),
+    };
+  }
+
+  const dayMs = 24 * 60 * 60 * 1000;
+  const lengthDays = Math.round((end.getTime() - start.getTime()) / dayMs) + 1;
+  const prevEnd = new Date(start.getTime() - dayMs);
+  const prevStart = new Date(prevEnd.getTime() - (lengthDays - 1) * dayMs);
+  return {
+    startDate: formatIsoDateUtc(prevStart),
+    endDate: formatIsoDateUtc(prevEnd),
+  };
 }
 
 function diffDays(dueDateStr: string, refDateStr = "2026-10-27"): number {
@@ -1925,8 +2059,17 @@ export function computeReportsForFilter(
   const basis = filter?.basis ?? "accrual";
   const startDate = filter?.startDate?.trim() || "";
   const endDate = filter?.endDate?.trim() || "";
+  const entityFilter = filter?.entityName?.trim().toLowerCase() || "";
+  const glAccountFilter = filter?.accountId?.trim() || "";
 
-  const effectiveEntries = getEffectiveEntriesForBasis(store, basis);
+  const matchesEntity = (name?: string) =>
+    !entityFilter || (name ?? "").trim().toLowerCase() === entityFilter;
+
+  const basisEntries = getEffectiveEntriesForBasis(store, basis);
+  // Entity filter keeps whole entries (never individual lines) so every report stays balanced.
+  const effectiveEntries = entityFilter
+    ? basisEntries.filter((e) => e.lines.some((l) => matchesEntity(l.entityName)))
+    : basisEntries;
   const sortedAll = [...effectiveEntries].sort((a, b) =>
     a.date.localeCompare(b.date)
   );
@@ -2117,6 +2260,7 @@ export function computeReportsForFilter(
     for (const inv of store.invoices) {
       if (endDate && inv.date > endDate) continue;
       if (inv.status === "Paid" || inv.balanceDueCents <= 0) continue;
+      if (!matchesEntity(inv.customerName)) continue;
       const row = arMap.get(inv.customerId) ?? {
         entityId: inv.customerId,
         entityName: inv.customerName,
@@ -2149,6 +2293,7 @@ export function computeReportsForFilter(
     for (const bill of store.expenses) {
       if (endDate && bill.date > endDate) continue;
       if (bill.type !== "Bill" || bill.status === "Paid") continue;
+      if (!matchesEntity(bill.vendorName)) continue;
       const row = apMap.get(bill.vendorId) ?? {
         entityId: bill.vendorId,
         entityName: bill.vendorName,
@@ -2180,6 +2325,7 @@ export function computeReportsForFilter(
 
   // General Ledger Calculation
   const generalLedger = asOfBalances
+    .filter((acc) => !glAccountFilter || acc.id === glAccountFilter)
     .map((acc) => {
       let runningBalanceCents = 0;
       const movements: ComputedQboState["reports"]["generalLedger"][number]["movements"] =
@@ -3901,46 +4047,120 @@ export function matchBankTransaction(input: {
   return je;
 }
 
-export function createCustomer(input: {
-  name: string;
+export interface ContactProfileInput {
+  /** Display name. Optional if a company or first/last name is provided. */
+  name?: string;
   company?: string;
+  firstName?: string;
+  lastName?: string;
   email?: string;
   phone?: string;
-}): QboCustomer {
+  taxId?: string;
+  address?: QboPostalAddress;
+}
+
+function cleanOptional(value?: string, maxLength = 200): string | undefined {
+  const trimmed = (value ?? "").trim();
+  if (!trimmed) return undefined;
+  return trimmed.slice(0, maxLength);
+}
+
+function cleanAddress(address?: QboPostalAddress): QboPostalAddress | undefined {
+  if (!address) return undefined;
+  const cleaned: QboPostalAddress = {
+    street: cleanOptional(address.street),
+    city: cleanOptional(address.city, 100),
+    state: cleanOptional(address.state, 100),
+    postalCode: cleanOptional(address.postalCode, 20),
+    country: cleanOptional(address.country, 100),
+  };
+  return Object.values(cleaned).some(Boolean) ? cleaned : undefined;
+}
+
+function resolveDisplayName(input: ContactProfileInput, kind: string): string {
+  const fullName = [input.firstName, input.lastName]
+    .map((p) => (p ?? "").trim())
+    .filter(Boolean)
+    .join(" ");
+  const displayName =
+    cleanOptional(input.name) || cleanOptional(fullName) || cleanOptional(input.company);
+  if (!displayName) {
+    throw new Error(
+      `${kind} display name is required (or provide a company name / first & last name).`
+    );
+  }
+  return displayName;
+}
+
+export function formatPostalAddress(address?: QboPostalAddress): string {
+  if (!address) return "";
+  const cityLine = [address.city, [address.state, address.postalCode].filter(Boolean).join(" ")]
+    .filter(Boolean)
+    .join(", ");
+  return [address.street, cityLine, address.country].filter(Boolean).join(", ");
+}
+
+export function createCustomer(input: ContactProfileInput): QboCustomer {
   assertCanWrite();
   const store = getRawStore();
-  const cleanName = input.name.trim();
-  if (!cleanName) throw new Error("Customer name is required.");
+  const displayName = resolveDisplayName(input, "Customer");
+  if (
+    store.customers.some(
+      (c) => c.name.trim().toLowerCase() === displayName.toLowerCase()
+    )
+  ) {
+    throw new Error(`A customer named "${displayName}" already exists.`);
+  }
 
   const customer: QboCustomer = {
     id: `cust-${Date.now()}`,
-    name: cleanName,
-    company: input.company?.trim() || cleanName,
-    email: input.email?.trim() || "",
-    phone: input.phone?.trim() || "",
+    name: displayName,
+    company: cleanOptional(input.company) || displayName,
+    email: cleanOptional(input.email) || "",
+    phone: cleanOptional(input.phone, 50) || "",
+    firstName: cleanOptional(input.firstName, 100),
+    lastName: cleanOptional(input.lastName, 100),
+    taxId: cleanOptional(input.taxId, 50),
+    address: cleanAddress(input.address),
   };
   store.customers.push(customer);
   appendAuditLog("Customer Added", `${customer.name} (${customer.company})`);
   return customer;
 }
 
-export function createVendor(input: {
-  name: string;
-  email?: string;
-  phone?: string;
-  defaultExpenseAccountId?: string;
-}): QboVendor {
+export function createVendor(
+  input: ContactProfileInput & { defaultExpenseAccountId?: string }
+): QboVendor {
   assertCanWrite();
   const store = getRawStore();
-  const cleanName = input.name.trim();
-  if (!cleanName) throw new Error("Vendor name is required.");
+  const displayName = resolveDisplayName(input, "Vendor");
+  if (
+    store.vendors.some(
+      (v) => v.name.trim().toLowerCase() === displayName.toLowerCase()
+    )
+  ) {
+    throw new Error(`A vendor named "${displayName}" already exists.`);
+  }
+
+  const defaultExpenseAccountId = cleanOptional(input.defaultExpenseAccountId);
+  if (
+    defaultExpenseAccountId &&
+    !store.accounts.some((a) => a.id === defaultExpenseAccountId)
+  ) {
+    throw new Error("Default expense category account not found.");
+  }
 
   const vendor: QboVendor = {
     id: `vend-${Date.now()}`,
-    name: cleanName,
-    email: input.email?.trim() || "",
-    phone: input.phone?.trim() || "",
-    defaultExpenseAccountId: input.defaultExpenseAccountId || "acc-5010",
+    name: displayName,
+    email: cleanOptional(input.email) || "",
+    phone: cleanOptional(input.phone, 50) || "",
+    company: cleanOptional(input.company),
+    firstName: cleanOptional(input.firstName, 100),
+    lastName: cleanOptional(input.lastName, 100),
+    taxId: cleanOptional(input.taxId, 50),
+    address: cleanAddress(input.address),
+    defaultExpenseAccountId,
   };
   store.vendors.push(vendor);
   appendAuditLog("Vendor Added", vendor.name);

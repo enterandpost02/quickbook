@@ -25,6 +25,8 @@ import {
 } from "lucide-react";
 import {
   computeReportsForFilter,
+  computeComparisonRange,
+  formatPostalAddress,
   type ComputedQboState,
 } from "@/lib/qbo-store";
 import { formatCents, parseDollarsToCents } from "@/lib/money";
@@ -1488,8 +1490,9 @@ export function SalesAndInvoicesView({
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase">
               <tr>
                 <th className="px-4 py-3">Customer / Company</th>
-                <th className="px-4 py-3">Email</th>
-                <th className="px-4 py-3">Phone</th>
+                <th className="px-4 py-3">Tax ID</th>
+                <th className="px-4 py-3">Contact</th>
+                <th className="px-4 py-3">Billing Address</th>
                 <th className="px-4 py-3 text-right">Open Balance</th>
               </tr>
             </thead>
@@ -1498,14 +1501,34 @@ export function SalesAndInvoicesView({
                 const openBal = state.invoices
                   .filter((i) => i.customerId === c.id)
                   .reduce((s, i) => s + i.balanceDueCents, 0);
+                const contactPerson = [c.firstName, c.lastName].filter(Boolean).join(" ");
+                const addrStr = formatPostalAddress(c.address);
                 return (
                   <tr key={c.id} className="hover:bg-slate-50">
-                    <td className="px-4 py-3 font-semibold text-slate-900">
-                      {c.name}
+                    <td className="px-4 py-3">
+                      <div className="font-semibold text-slate-900">{c.name}</div>
+                      {contactPerson && contactPerson !== c.name && (
+                        <div className="text-[11px] text-slate-500">Contact: {contactPerson}</div>
+                      )}
+                      {c.company && c.company !== c.name && (
+                        <div className="text-[11px] text-slate-400">{c.company}</div>
+                      )}
                     </td>
-                    <td className="px-4 py-3 text-slate-600">{c.email}</td>
                     <td className="px-4 py-3 font-mono text-slate-600">
-                      {c.phone}
+                      {c.taxId ? (
+                        <span className="rounded bg-slate-100 px-1.5 py-0.5 font-semibold text-slate-700">
+                          {c.taxId}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="text-slate-700">{c.email || "—"}</div>
+                      <div className="font-mono text-[11px] text-slate-500">{c.phone || ""}</div>
+                    </td>
+                    <td className="px-4 py-3 text-slate-600 max-w-xs truncate" title={addrStr}>
+                      {addrStr || <span className="text-slate-400">—</span>}
                     </td>
                     <td className="px-4 py-3 text-right font-mono font-bold text-slate-900">
                       {formatCents(openBal)}
@@ -1704,9 +1727,11 @@ export function ExpensesAndVendorsView({
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase">
               <tr>
-                <th className="px-4 py-3">Vendor</th>
-                <th className="px-4 py-3">Email</th>
-                <th className="px-4 py-3">Phone</th>
+                <th className="px-4 py-3">Vendor / Company</th>
+                <th className="px-4 py-3">Tax ID / 1099</th>
+                <th className="px-4 py-3">Default Category</th>
+                <th className="px-4 py-3">Contact</th>
+                <th className="px-4 py-3">Address</th>
                 <th className="px-4 py-3 text-right">Open Bill Balance</th>
               </tr>
             </thead>
@@ -1720,16 +1745,47 @@ export function ExpensesAndVendorsView({
                       e.status !== "Paid"
                   )
                   .reduce((s, e) => s + e.amountCents, 0);
+                const contactPerson = [v.firstName, v.lastName].filter(Boolean).join(" ");
+                const addrStr = formatPostalAddress(v.address);
+                const defAccount = v.defaultExpenseAccountId
+                  ? state.accounts.find((a) => a.id === v.defaultExpenseAccountId)
+                  : undefined;
+
                 return (
                   <tr key={v.id} className="hover:bg-slate-50">
-                    <td className="px-4 py-3 font-semibold text-slate-900">
-                      {v.name}
-                    </td>
-                    <td className="px-4 py-3 text-slate-600">
-                      {v.email || "—"}
+                    <td className="px-4 py-3">
+                      <div className="font-semibold text-slate-900">{v.name}</div>
+                      {contactPerson && contactPerson !== v.name && (
+                        <div className="text-[11px] text-slate-500">Contact: {contactPerson}</div>
+                      )}
+                      {v.company && v.company !== v.name && (
+                        <div className="text-[11px] text-slate-400">{v.company}</div>
+                      )}
                     </td>
                     <td className="px-4 py-3 font-mono text-slate-600">
-                      {v.phone || "—"}
+                      {v.taxId ? (
+                        <span className="rounded bg-slate-100 px-1.5 py-0.5 font-semibold text-slate-700">
+                          {v.taxId}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      {defAccount ? (
+                        <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-700">
+                          {defAccount.code} · {defAccount.name}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 italic">Optional (Select per bill)</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="text-slate-700">{v.email || "—"}</div>
+                      <div className="font-mono text-[11px] text-slate-500">{v.phone || ""}</div>
+                    </td>
+                    <td className="px-4 py-3 text-slate-600 max-w-xs truncate" title={addrStr}>
+                      {addrStr || <span className="text-slate-400">—</span>}
                     </td>
                     <td className="px-4 py-3 text-right font-mono font-bold text-slate-900">
                       {formatCents(openAp)}
@@ -2000,12 +2056,26 @@ export function ReportsCenterView({ state }: ViewProps) {
   >("pnl");
   const [basis, setBasis] = useState<"Accrual" | "Cash">("Accrual");
   const [datePreset, setDatePreset] = useState<
-    "all" | "oct_2026" | "sep_2026" | "custom"
+    "all" | "oct_2026" | "sep_2026" | "q3_2026" | "q4_2026" | "ytd_2026" | "custom"
   >("all");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
-  function applyPreset(preset: "all" | "oct_2026" | "sep_2026" | "custom") {
+  // Enhanced Filter Options
+  const [entityFilter, setEntityFilter] = useState("");
+  const [accountFilter, setAccountFilter] = useState("");
+  const [hideZeroRows, setHideZeroRows] = useState(false);
+
+  // Period Comparison Options
+  const [compareMode, setCompareMode] = useState<
+    "none" | "previous_period" | "previous_year" | "custom"
+  >("none");
+  const [compareStartDate, setCompareStartDate] = useState("");
+  const [compareEndDate, setCompareEndDate] = useState("");
+
+  function applyPreset(
+    preset: "all" | "oct_2026" | "sep_2026" | "q3_2026" | "q4_2026" | "ytd_2026" | "custom"
+  ) {
     setDatePreset(preset);
     if (preset === "all") {
       setStartDate("");
@@ -2016,14 +2086,50 @@ export function ReportsCenterView({ state }: ViewProps) {
     } else if (preset === "sep_2026") {
       setStartDate("2026-09-01");
       setEndDate("2026-09-30");
+    } else if (preset === "q3_2026") {
+      setStartDate("2026-07-01");
+      setEndDate("2026-09-30");
+    } else if (preset === "q4_2026") {
+      setStartDate("2026-10-01");
+      setEndDate("2026-12-31");
+    } else if (preset === "ytd_2026") {
+      setStartDate("2026-01-01");
+      setEndDate("2026-10-31");
     }
   }
+
+  // Active comparison range calculation
+  const effectiveCompareRange =
+    compareMode === "previous_period"
+      ? computeComparisonRange(startDate, endDate, "previous_period")
+      : compareMode === "previous_year"
+      ? computeComparisonRange(startDate, endDate, "previous_year")
+      : compareMode === "custom"
+      ? { startDate: compareStartDate || undefined, endDate: compareEndDate || undefined }
+      : null;
+
+  const isComparing =
+    compareMode !== "none" &&
+    (reportTab === "pnl" || reportTab === "bs" || reportTab === "tb");
 
   const computedReports = computeReportsForFilter(state, {
     basis: basis === "Cash" ? "cash" : "accrual",
     startDate: startDate || undefined,
     endDate: endDate || undefined,
+    entityName: entityFilter.trim() || undefined,
+    accountId: accountFilter || undefined,
   });
+
+  const comparisonReports =
+    isComparing && effectiveCompareRange
+      ? computeReportsForFilter(state, {
+          basis: basis === "Cash" ? "cash" : "accrual",
+          startDate: effectiveCompareRange.startDate,
+          endDate: effectiveCompareRange.endDate,
+          entityName: entityFilter.trim() || undefined,
+          accountId: accountFilter || undefined,
+        })
+      : null;
 
   const {
     profitAndLoss,
@@ -2034,35 +2140,125 @@ export function ReportsCenterView({ state }: ViewProps) {
     generalLedger,
   } = computedReports;
 
+  // Comparison lookup maps
+  const priorIncomeMap = new Map(
+    comparisonReports?.profitAndLoss.incomeLines.map((l) => [l.code, l.amountCents]) ?? []
+  );
+  const priorCogsMap = new Map(
+    comparisonReports?.profitAndLoss.cogsLines.map((l) => [l.code, l.amountCents]) ?? []
+  );
+  const priorExpenseMap = new Map(
+    comparisonReports?.profitAndLoss.expenseLines.map((l) => [l.code, l.amountCents]) ?? []
+  );
+  const priorAssetMap = new Map(
+    comparisonReports?.balanceSheet.assetLines.map((l) => [l.code, l.amountCents]) ?? []
+  );
+  const priorLiabMap = new Map(
+    comparisonReports?.balanceSheet.liabilityLines.map((l) => [l.code, l.amountCents]) ?? []
+  );
+  const priorEquityMap = new Map(
+    comparisonReports?.balanceSheet.equityLines.map((l) => [l.code, l.amountCents]) ?? []
+  );
+  const priorTbMap = new Map(
+    comparisonReports?.trialBalance.rows.map((r) => [r.code, r]) ?? []
+  );
+
+  function computeVariance(currentCents: number, priorCents: number) {
+    const diffCents = currentCents - priorCents;
+    let pctStr = "—";
+    if (priorCents !== 0) {
+      const pct = (diffCents / Math.abs(priorCents)) * 100;
+      pctStr = `${diffCents > 0 ? "+" : ""}${pct.toFixed(1)}%`;
+    } else if (currentCents !== 0) {
+      pctStr = currentCents > 0 ? "+100%" : "-100%";
+    }
+    return { diffCents, pctStr };
+  }
+
   function exportReportCsv() {
-    let csv = "Section,Code/Entity,Name,Amount\n";
+    let csv = "";
     if (reportTab === "pnl") {
-      for (const l of profitAndLoss.incomeLines) {
-        csv += `Income,${l.code},"${l.name}",${(l.amountCents / 100).toFixed(2)}\n`;
+      if (isComparing) {
+        csv = "Section,Code,Name,Current ($),Prior Period ($),$ Change,% Change\n";
+        const writeRow = (sec: string, code: string, name: string, cur: number, prior: number) => {
+          const { diffCents, pctStr } = computeVariance(cur, prior);
+          csv += `"${sec}","${code}","${name}",${(cur / 100).toFixed(2)},${(prior / 100).toFixed(2)},${(diffCents / 100).toFixed(2)},"${pctStr}"\n`;
+        };
+        for (const l of profitAndLoss.incomeLines) {
+          writeRow("Income", l.code, l.name, l.amountCents, priorIncomeMap.get(l.code) ?? 0);
+        }
+        writeRow("Total Income", "", "Total Income", profitAndLoss.totalIncomeCents, comparisonReports?.profitAndLoss.totalIncomeCents ?? 0);
+        for (const l of profitAndLoss.cogsLines) {
+          writeRow("COGS", l.code, l.name, l.amountCents, priorCogsMap.get(l.code) ?? 0);
+        }
+        writeRow("Total COGS", "", "Total Cost of Goods Sold", profitAndLoss.totalCogsCents, comparisonReports?.profitAndLoss.totalCogsCents ?? 0);
+        writeRow("Gross Profit", "", "Gross Profit", profitAndLoss.grossProfitCents, comparisonReports?.profitAndLoss.grossProfitCents ?? 0);
+        for (const l of profitAndLoss.expenseLines) {
+          writeRow("Expenses", l.code, l.name, l.amountCents, priorExpenseMap.get(l.code) ?? 0);
+        }
+        writeRow("Total Expenses", "", "Total Operating Expenses", profitAndLoss.totalExpensesCents, comparisonReports?.profitAndLoss.totalExpensesCents ?? 0);
+        writeRow("Net Income", "", "Net Income", profitAndLoss.netIncomeCents, comparisonReports?.profitAndLoss.netIncomeCents ?? 0);
+      } else {
+        csv = "Section,Code,Name,Amount\n";
+        for (const l of profitAndLoss.incomeLines) {
+          csv += `Income,${l.code},"${l.name}",${(l.amountCents / 100).toFixed(2)}\n`;
+        }
+        for (const l of profitAndLoss.cogsLines) {
+          csv += `COGS,${l.code},"${l.name}",${(l.amountCents / 100).toFixed(2)}\n`;
+        }
+        for (const l of profitAndLoss.expenseLines) {
+          csv += `Expenses,${l.code},"${l.name}",${(l.amountCents / 100).toFixed(2)}\n`;
+        }
+        csv += `Net Income,,,"${(profitAndLoss.netIncomeCents / 100).toFixed(2)}"\n`;
       }
-      for (const l of profitAndLoss.cogsLines) {
-        csv += `COGS,${l.code},"${l.name}",${(l.amountCents / 100).toFixed(2)}\n`;
-      }
-      for (const l of profitAndLoss.expenseLines) {
-        csv += `Expenses,${l.code},"${l.name}",${(l.amountCents / 100).toFixed(2)}\n`;
-      }
-      csv += `Net Income,,,"${(profitAndLoss.netIncomeCents / 100).toFixed(2)}"\n`;
     } else if (reportTab === "tb") {
-      csv = "Account Code,Account Name,Debit,Credit\n";
-      for (const r of trialBalance.rows) {
-        csv += `${r.code},"${r.name}",${(r.debitBalanceCents / 100).toFixed(
-          2
-        )},${(r.creditBalanceCents / 100).toFixed(2)}\n`;
+      if (isComparing) {
+        csv = "Account Code,Account Name,Type,Current Debit,Current Credit,Prior Debit,Prior Credit\n";
+        for (const r of trialBalance.rows) {
+          const prior = priorTbMap.get(r.code);
+          csv += `"${r.code}","${r.name}","${r.type}",${(r.debitBalanceCents / 100).toFixed(2)},${(r.creditBalanceCents / 100).toFixed(2)},${((prior?.debitBalanceCents ?? 0) / 100).toFixed(2)},${((prior?.creditBalanceCents ?? 0) / 100).toFixed(2)}\n`;
+        }
+      } else {
+        csv = "Account Code,Account Name,Debit,Credit\n";
+        for (const r of trialBalance.rows) {
+          csv += `${r.code},"${r.name}",${(r.debitBalanceCents / 100).toFixed(2)},${(r.creditBalanceCents / 100).toFixed(2)}\n`;
+        }
+      }
+    } else if (reportTab === "bs") {
+      if (isComparing) {
+        csv = "Section,Code,Name,Current ($),Prior Period ($),$ Change,% Change\n";
+        const writeRow = (sec: string, code: string, name: string, cur: number, prior: number) => {
+          const { diffCents, pctStr } = computeVariance(cur, prior);
+          csv += `"${sec}","${code}","${name}",${(cur / 100).toFixed(2)},${(prior / 100).toFixed(2)},${(diffCents / 100).toFixed(2)},"${pctStr}"\n`;
+        };
+        for (const l of balanceSheet.assetLines) {
+          writeRow("Assets", l.code, l.name, l.amountCents, priorAssetMap.get(l.code) ?? 0);
+        }
+        writeRow("Total Assets", "", "Total Assets", balanceSheet.totalAssetsCents, comparisonReports?.balanceSheet.totalAssetsCents ?? 0);
+        for (const l of balanceSheet.liabilityLines) {
+          writeRow("Liabilities", l.code, l.name, l.amountCents, priorLiabMap.get(l.code) ?? 0);
+        }
+        writeRow("Total Liabilities", "", "Total Liabilities", balanceSheet.totalLiabilitiesCents, comparisonReports?.balanceSheet.totalLiabilitiesCents ?? 0);
+        for (const l of balanceSheet.equityLines) {
+          writeRow("Equity", l.code, l.name, l.amountCents, priorEquityMap.get(l.code) ?? 0);
+        }
+        writeRow("Total Equity", "", "Total Equity", balanceSheet.totalEquityCents, comparisonReports?.balanceSheet.totalEquityCents ?? 0);
+      } else {
+        csv = "Section,Code,Name,Amount\n";
+        for (const l of balanceSheet.assetLines) {
+          csv += `Assets,${l.code},"${l.name}",${(l.amountCents / 100).toFixed(2)}\n`;
+        }
+        for (const l of balanceSheet.liabilityLines) {
+          csv += `Liabilities,${l.code},"${l.name}",${(l.amountCents / 100).toFixed(2)}\n`;
+        }
+        for (const l of balanceSheet.equityLines) {
+          csv += `Equity,${l.code},"${l.name}",${(l.amountCents / 100).toFixed(2)}\n`;
+        }
       }
     } else {
-      for (const l of balanceSheet.assetLines) {
-        csv += `Assets,${l.code},"${l.name}",${(l.amountCents / 100).toFixed(2)}\n`;
-      }
-      for (const l of balanceSheet.liabilityLines) {
-        csv += `Liabilities,${l.code},"${l.name}",${(l.amountCents / 100).toFixed(2)}\n`;
-      }
-      for (const l of balanceSheet.equityLines) {
-        csv += `Equity,${l.code},"${l.name}",${(l.amountCents / 100).toFixed(2)}\n`;
+      csv = "Entity,Current,1-30 Days,31-60 Days,61+ Days,Total\n";
+      for (const r of reportTab === "ar_aging" ? arAging.rows : apAging.rows) {
+        csv += `"${r.entityName}",${(r.currentCents / 100).toFixed(2)},${(r.days1To30Cents / 100).toFixed(2)},${(r.days31To60Cents / 100).toFixed(2)},${(r.days61PlusCents / 100).toFixed(2)},${(r.totalCents / 100).toFixed(2)}\n`;
       }
     }
 
@@ -2070,12 +2266,21 @@ export function ReportsCenterView({ state }: ViewProps) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${reportTab}-report.csv`;
+    a.download = `${reportTab}-report${isComparing ? "-comparison" : ""}.csv`;
     a.click();
   }
 
+  // All known entity names for dropdown filter
+  const allEntityNames = Array.from(
+    new Set([
+      ...state.customers.map((c) => c.name),
+      ...state.vendors.map((v) => v.name),
+    ])
+  ).sort();
+
   return (
     <div className="space-y-6">
+      {/* Top Tab Bar & Primary Action */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex flex-wrap items-center gap-1.5 bg-white p-1.5 rounded-xl border border-slate-200">
           {(
@@ -2102,76 +2307,225 @@ export function ReportsCenterView({ state }: ViewProps) {
           ))}
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          {/* Date Range Filter Controls */}
-          <div className="flex flex-wrap items-center gap-1.5 rounded-lg bg-white border border-slate-200 px-2.5 py-1 text-xs">
-            <span className="text-slate-400 font-semibold">Period:</span>
-            <select
-              value={datePreset}
-              onChange={(e) =>
-                applyPreset(
-                  e.target.value as "all" | "oct_2026" | "sep_2026" | "custom"
-                )
-              }
-              className="rounded border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-800"
-            >
-              <option value="all">All Dates</option>
-              <option value="oct_2026">October 2026</option>
-              <option value="sep_2026">September 2026</option>
-              <option value="custom">Custom Range</option>
-            </select>
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => {
-                setDatePreset("custom");
-                setStartDate(e.target.value);
-              }}
-              className="rounded border border-slate-200 px-2 py-0.5 text-xs font-mono text-slate-700"
-              title="Start Date"
-            />
-            <span className="text-slate-400">to</span>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => {
-                setDatePreset("custom");
-                setEndDate(e.target.value);
-              }}
-              className="rounded border border-slate-200 px-2 py-0.5 text-xs font-mono text-slate-700"
-              title="End Date"
-            />
-          </div>
-
-          <div className="flex items-center gap-1 rounded-lg bg-white border border-slate-200 p-1 text-xs">
-            <span className="px-2 text-slate-400">Basis:</span>
-            <button
-              onClick={() => setBasis("Accrual")}
-              className={`rounded px-2.5 py-1 font-semibold ${
-                basis === "Accrual"
-                  ? "bg-slate-900 text-white"
-                  : "text-slate-600"
-              }`}
-            >
-              Accrual
-            </button>
-            <button
-              onClick={() => setBasis("Cash")}
-              className={`rounded px-2.5 py-1 font-semibold ${
-                basis === "Cash" ? "bg-slate-900 text-white" : "text-slate-600"
-              }`}
-            >
-              Cash
-            </button>
-          </div>
-
+        <div className="flex items-center gap-2">
           <button
             onClick={exportReportCsv}
-            className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-4 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+            className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-4 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 shadow-2xs"
           >
             <Download className="h-3.5 w-3.5 text-[#2CA01C]" />
             Export CSV
           </button>
+        </div>
+      </div>
+
+      {/* Advanced Filter & Comparison Control Toolbar */}
+      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+              Filter Reports:
+            </span>
+
+            {/* Date Preset Selector */}
+            <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50/80 px-2.5 py-1 text-xs">
+              <span className="text-slate-400 font-medium">Period:</span>
+              <select
+                value={datePreset}
+                onChange={(e) =>
+                  applyPreset(
+                    e.target.value as
+                      | "all"
+                      | "oct_2026"
+                      | "sep_2026"
+                      | "q3_2026"
+                      | "q4_2026"
+                      | "ytd_2026"
+                      | "custom"
+                  )
+                }
+                className="bg-transparent font-semibold text-slate-800 focus:outline-none"
+              >
+                <option value="all">All Dates</option>
+                <option value="oct_2026">October 2026</option>
+                <option value="sep_2026">September 2026</option>
+                <option value="q3_2026">Q3 2026 (Jul - Sep)</option>
+                <option value="q4_2026">Q4 2026 (Oct - Dec)</option>
+                <option value="ytd_2026">Year-to-Date 2026</option>
+                <option value="custom">Custom Date Range</option>
+              </select>
+            </div>
+
+            {/* Start and End Date Inputs */}
+            <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-2 py-1 text-xs font-mono">
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => {
+                  setDatePreset("custom");
+                  setStartDate(e.target.value);
+                }}
+                className="bg-transparent text-slate-700 focus:outline-none"
+                title="Start Date"
+              />
+              <span className="text-slate-400 font-sans">to</span>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => {
+                  setDatePreset("custom");
+                  setEndDate(e.target.value);
+                }}
+                className="bg-transparent text-slate-700 focus:outline-none"
+                title="End Date"
+              />
+            </div>
+
+            {/* Accounting Basis Toggle */}
+            <div className="flex items-center gap-1 rounded-lg border border-slate-200 p-0.5 text-xs bg-slate-50">
+              <span className="px-2 text-slate-400 font-medium">Basis:</span>
+              <button
+                onClick={() => setBasis("Accrual")}
+                className={`rounded px-2.5 py-1 font-semibold transition-colors ${
+                  basis === "Accrual"
+                    ? "bg-slate-900 text-white"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                Accrual
+              </button>
+              <button
+                onClick={() => setBasis("Cash")}
+                className={`rounded px-2.5 py-1 font-semibold transition-colors ${
+                  basis === "Cash"
+                    ? "bg-slate-900 text-white"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                Cash
+              </button>
+            </div>
+          </div>
+
+          {/* Zero balance toggle */}
+          <label className="inline-flex items-center gap-2 text-xs font-medium text-slate-600 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={hideZeroRows}
+              onChange={(e) => setHideZeroRows(e.target.checked)}
+              className="rounded border-slate-300 text-[#2CA01C] focus:ring-[#2CA01C]"
+            />
+            Hide zero-balance rows
+          </label>
+        </div>
+
+        {/* Row 2: Entity Filter, GL Account Filter & Period Comparison Controls */}
+        <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex flex-wrap items-center gap-2.5">
+            {/* Payee / Entity Filter */}
+            <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1 bg-white">
+              <span className="text-slate-400 font-medium">Entity / Payee:</span>
+              <select
+                value={entityFilter}
+                onChange={(e) => setEntityFilter(e.target.value)}
+                className="bg-transparent font-semibold text-slate-800 focus:outline-none max-w-xs"
+              >
+                <option value="">— All Customers &amp; Vendors —</option>
+                {allEntityNames.map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+              {entityFilter && (
+                <button
+                  onClick={() => setEntityFilter("")}
+                  className="text-slate-400 hover:text-slate-700 ml-1 font-bold"
+                  title="Clear entity filter"
+                >
+                  ×
+                </button>
+              )}
+            </div>
+
+            {/* General Ledger Account Filter */}
+            {reportTab === "gl" && (
+              <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1 bg-white">
+                <span className="text-slate-400 font-medium">Account:</span>
+                <select
+                  value={accountFilter}
+                  onChange={(e) => setAccountFilter(e.target.value)}
+                  className="bg-transparent font-semibold text-slate-800 focus:outline-none max-w-xs"
+                >
+                  <option value="">— All GL Accounts —</option>
+                  {state.accounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.code} · {a.name} ({a.type})
+                    </option>
+                  ))}
+                </select>
+                {accountFilter && (
+                  <button
+                    onClick={() => setAccountFilter("")}
+                    className="text-slate-400 hover:text-slate-700 ml-1 font-bold"
+                    title="Clear account filter"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Period Comparison Controls (For P&L, BS, Trial Balance) */}
+          {(reportTab === "pnl" || reportTab === "bs" || reportTab === "tb") && (
+            <div className="flex flex-wrap items-center gap-2 rounded-lg bg-emerald-50/70 border border-emerald-200 px-2.5 py-1">
+              <span className="text-[#2CA01C] font-bold">Compare:</span>
+              <select
+                value={compareMode}
+                onChange={(e) =>
+                  setCompareMode(
+                    e.target.value as
+                      | "none"
+                      | "previous_period"
+                      | "previous_year"
+                      | "custom"
+                  )
+                }
+                className="bg-transparent font-bold text-slate-800 focus:outline-none"
+              >
+                <option value="none">No Comparison (Single Period)</option>
+                <option value="previous_period">Previous Period (PP)</option>
+                <option value="previous_year">Previous Year (PY)</option>
+                <option value="custom">Custom Comparison Range</option>
+              </select>
+
+              {compareMode === "custom" && (
+                <div className="flex items-center gap-1 border-l border-emerald-200 pl-2 font-mono">
+                  <input
+                    type="date"
+                    value={compareStartDate}
+                    onChange={(e) => setCompareStartDate(e.target.value)}
+                    className="rounded border border-emerald-300 bg-white px-1.5 py-0.5 text-xs text-slate-700"
+                    title="Compare Start Date"
+                  />
+                  <span className="text-slate-400 font-sans">to</span>
+                  <input
+                    type="date"
+                    value={compareEndDate}
+                    onChange={(e) => setCompareEndDate(e.target.value)}
+                    className="rounded border border-emerald-300 bg-white px-1.5 py-0.5 text-xs text-slate-700"
+                    title="Compare End Date"
+                  />
+                </div>
+              )}
+
+              {isComparing && effectiveCompareRange?.startDate && (
+                <span className="hidden xl:inline text-[11px] font-mono text-emerald-800">
+                  [{effectiveCompareRange.startDate} → {effectiveCompareRange.endDate || "Present"}]
+                </span>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -2198,36 +2552,123 @@ export function ReportsCenterView({ state }: ViewProps) {
             {basis} Basis ·{" "}
             {startDate || endDate
               ? `${startDate || "Inception"} through ${endDate || "Present"}`
-              : "All Dates"}{" "}
+              : "All Dates"}
+            {entityFilter ? ` · Entity: "${entityFilter}"` : ""}
+            {isComparing
+              ? ` · Compared to ${
+                  effectiveCompareRange?.startDate || "Prior"
+                } through ${effectiveCompareRange?.endDate || "Prior"}`
+              : ""}{" "}
             · All amounts in integer-cents USD
           </p>
         </div>
 
+        {/* ---------------- PROFIT AND LOSS ---------------- */}
         {reportTab === "pnl" && (
           <div className="space-y-6 text-xs">
+            {isComparing && (
+              <div className="grid grid-cols-12 font-bold uppercase tracking-wider text-slate-500 border-b-2 border-slate-800 pb-2">
+                <span className="col-span-5">Account / Category</span>
+                <span className="col-span-2 text-right">Current Period</span>
+                <span className="col-span-2 text-right">Prior Period</span>
+                <span className="col-span-2 text-right">$ Change</span>
+                <span className="col-span-1 text-right">% Change</span>
+              </div>
+            )}
+
             {/* Income */}
             <div>
               <h3 className="font-bold uppercase tracking-wider text-slate-500 border-b border-slate-200 pb-1.5 mb-2">
                 Income
               </h3>
               <div className="space-y-1.5">
-                {profitAndLoss.incomeLines.map((l) => (
-                  <div key={l.id} className="flex justify-between py-1">
-                    <span className="text-slate-800">
-                      {l.code} · {l.name}
+                {profitAndLoss.incomeLines
+                  .filter(
+                    (l) =>
+                      !hideZeroRows ||
+                      l.amountCents !== 0 ||
+                      (priorIncomeMap.get(l.code) ?? 0) !== 0
+                  )
+                  .map((l) => {
+                    const prior = priorIncomeMap.get(l.code) ?? 0;
+                    const { diffCents, pctStr } = computeVariance(l.amountCents, prior);
+                    if (!isComparing) {
+                      return (
+                        <div key={l.id} className="flex justify-between py-1">
+                          <span className="text-slate-800">
+                            {l.code} · {l.name}
+                          </span>
+                          <span className="font-mono font-medium text-slate-900">
+                            {formatCents(l.amountCents)}
+                          </span>
+                        </div>
+                      );
+                    }
+                    return (
+                      <div key={l.id} className="grid grid-cols-12 py-1 items-center">
+                        <span className="col-span-5 text-slate-800 font-medium">
+                          {l.code} · {l.name}
+                        </span>
+                        <span className="col-span-2 text-right font-mono font-medium text-slate-900">
+                          {formatCents(l.amountCents)}
+                        </span>
+                        <span className="col-span-2 text-right font-mono text-slate-500">
+                          {formatCents(prior)}
+                        </span>
+                        <span
+                          className={`col-span-2 text-right font-mono font-semibold ${
+                            diffCents > 0
+                              ? "text-emerald-700"
+                              : diffCents < 0
+                              ? "text-rose-700"
+                              : "text-slate-500"
+                          }`}
+                        >
+                          {diffCents > 0 ? "+" : ""}
+                          {formatCents(diffCents)}
+                        </span>
+                        <span className="col-span-1 text-right font-mono text-slate-600">
+                          {pctStr}
+                        </span>
+                      </div>
+                    );
+                  })}
+              </div>
+              {/* Total Income */}
+              {(() => {
+                const priorTotal = comparisonReports?.profitAndLoss.totalIncomeCents ?? 0;
+                const { diffCents, pctStr } = computeVariance(
+                  profitAndLoss.totalIncomeCents,
+                  priorTotal
+                );
+                return isComparing ? (
+                  <div className="grid grid-cols-12 border-t border-slate-300 pt-2 mt-2 font-bold text-slate-900 items-center">
+                    <span className="col-span-5">Total Income</span>
+                    <span className="col-span-2 text-right font-mono">
+                      {formatCents(profitAndLoss.totalIncomeCents)}
                     </span>
-                    <span className="font-mono font-medium text-slate-900">
-                      {formatCents(l.amountCents)}
+                    <span className="col-span-2 text-right font-mono text-slate-600">
+                      {formatCents(priorTotal)}
+                    </span>
+                    <span
+                      className={`col-span-2 text-right font-mono ${
+                        diffCents >= 0 ? "text-emerald-700" : "text-rose-700"
+                      }`}
+                    >
+                      {diffCents > 0 ? "+" : ""}
+                      {formatCents(diffCents)}
+                    </span>
+                    <span className="col-span-1 text-right font-mono">{pctStr}</span>
+                  </div>
+                ) : (
+                  <div className="flex justify-between border-t border-slate-300 pt-2 mt-2 font-bold text-slate-900">
+                    <span>Total Income</span>
+                    <span className="font-mono">
+                      {formatCents(profitAndLoss.totalIncomeCents)}
                     </span>
                   </div>
-                ))}
-              </div>
-              <div className="flex justify-between border-t border-slate-300 pt-2 mt-2 font-bold text-slate-900">
-                <span>Total Income</span>
-                <span className="font-mono">
-                  {formatCents(profitAndLoss.totalIncomeCents)}
-                </span>
-              </div>
+                );
+              })()}
             </div>
 
             {/* COGS */}
@@ -2236,197 +2677,676 @@ export function ReportsCenterView({ state }: ViewProps) {
                 Cost of Goods Sold
               </h3>
               <div className="space-y-1.5">
-                {profitAndLoss.cogsLines.map((l) => (
-                  <div key={l.id} className="flex justify-between py-1">
-                    <span className="text-slate-800">
-                      {l.code} · {l.name}
+                {profitAndLoss.cogsLines
+                  .filter(
+                    (l) =>
+                      !hideZeroRows ||
+                      l.amountCents !== 0 ||
+                      (priorCogsMap.get(l.code) ?? 0) !== 0
+                  )
+                  .map((l) => {
+                    const prior = priorCogsMap.get(l.code) ?? 0;
+                    const { diffCents, pctStr } = computeVariance(l.amountCents, prior);
+                    if (!isComparing) {
+                      return (
+                        <div key={l.id} className="flex justify-between py-1">
+                          <span className="text-slate-800">
+                            {l.code} · {l.name}
+                          </span>
+                          <span className="font-mono font-medium text-slate-900">
+                            {formatCents(l.amountCents)}
+                          </span>
+                        </div>
+                      );
+                    }
+                    return (
+                      <div key={l.id} className="grid grid-cols-12 py-1 items-center">
+                        <span className="col-span-5 text-slate-800 font-medium">
+                          {l.code} · {l.name}
+                        </span>
+                        <span className="col-span-2 text-right font-mono font-medium text-slate-900">
+                          {formatCents(l.amountCents)}
+                        </span>
+                        <span className="col-span-2 text-right font-mono text-slate-500">
+                          {formatCents(prior)}
+                        </span>
+                        <span
+                          className={`col-span-2 text-right font-mono font-semibold ${
+                            diffCents > 0
+                              ? "text-rose-700"
+                              : diffCents < 0
+                              ? "text-emerald-700"
+                              : "text-slate-500"
+                          }`}
+                        >
+                          {diffCents > 0 ? "+" : ""}
+                          {formatCents(diffCents)}
+                        </span>
+                        <span className="col-span-1 text-right font-mono text-slate-600">
+                          {pctStr}
+                        </span>
+                      </div>
+                    );
+                  })}
+              </div>
+              {/* Total COGS */}
+              {(() => {
+                const priorTotal = comparisonReports?.profitAndLoss.totalCogsCents ?? 0;
+                const { diffCents, pctStr } = computeVariance(
+                  profitAndLoss.totalCogsCents,
+                  priorTotal
+                );
+                return isComparing ? (
+                  <div className="grid grid-cols-12 border-t border-slate-300 pt-2 mt-2 font-bold text-slate-900 items-center">
+                    <span className="col-span-5">Total Cost of Goods Sold</span>
+                    <span className="col-span-2 text-right font-mono">
+                      {formatCents(profitAndLoss.totalCogsCents)}
                     </span>
-                    <span className="font-mono font-medium text-slate-900">
-                      {formatCents(l.amountCents)}
+                    <span className="col-span-2 text-right font-mono text-slate-600">
+                      {formatCents(priorTotal)}
+                    </span>
+                    <span className="col-span-2 text-right font-mono">
+                      {diffCents > 0 ? "+" : ""}
+                      {formatCents(diffCents)}
+                    </span>
+                    <span className="col-span-1 text-right font-mono">{pctStr}</span>
+                  </div>
+                ) : (
+                  <div className="flex justify-between border-t border-slate-300 pt-2 mt-2 font-bold text-slate-900">
+                    <span>Total Cost of Goods Sold</span>
+                    <span className="font-mono">
+                      {formatCents(profitAndLoss.totalCogsCents)}
                     </span>
                   </div>
-                ))}
-              </div>
-              <div className="flex justify-between border-t border-slate-300 pt-2 mt-2 font-bold text-slate-900">
-                <span>Total Cost of Goods Sold</span>
-                <span className="font-mono">
-                  {formatCents(profitAndLoss.totalCogsCents)}
-                </span>
-              </div>
+                );
+              })()}
             </div>
 
-            <div className="flex justify-between bg-slate-50 p-3 rounded-lg font-bold text-sm text-slate-900">
-              <span>Gross Profit</span>
-              <span className="font-mono">
-                {formatCents(profitAndLoss.grossProfitCents)}
-              </span>
-            </div>
+            {/* Gross Profit */}
+            {(() => {
+              const priorGross = comparisonReports?.profitAndLoss.grossProfitCents ?? 0;
+              const { diffCents, pctStr } = computeVariance(
+                profitAndLoss.grossProfitCents,
+                priorGross
+              );
+              return isComparing ? (
+                <div className="grid grid-cols-12 bg-slate-50 p-3 rounded-lg font-bold text-sm text-slate-900 items-center">
+                  <span className="col-span-5">Gross Profit</span>
+                  <span className="col-span-2 text-right font-mono">
+                    {formatCents(profitAndLoss.grossProfitCents)}
+                  </span>
+                  <span className="col-span-2 text-right font-mono text-slate-600">
+                    {formatCents(priorGross)}
+                  </span>
+                  <span
+                    className={`col-span-2 text-right font-mono ${
+                      diffCents >= 0 ? "text-emerald-700" : "text-rose-700"
+                    }`}
+                  >
+                    {diffCents > 0 ? "+" : ""}
+                    {formatCents(diffCents)}
+                  </span>
+                  <span className="col-span-1 text-right font-mono">{pctStr}</span>
+                </div>
+              ) : (
+                <div className="flex justify-between bg-slate-50 p-3 rounded-lg font-bold text-sm text-slate-900">
+                  <span>Gross Profit</span>
+                  <span className="font-mono">
+                    {formatCents(profitAndLoss.grossProfitCents)}
+                  </span>
+                </div>
+              );
+            })()}
 
-            {/* Expenses */}
+            {/* Operating Expenses */}
             <div>
               <h3 className="font-bold uppercase tracking-wider text-slate-500 border-b border-slate-200 pb-1.5 mb-2">
                 Operating Expenses
               </h3>
               <div className="space-y-1.5">
-                {profitAndLoss.expenseLines.map((l) => (
-                  <div key={l.id} className="flex justify-between py-1">
-                    <span className="text-slate-800">
-                      {l.code} · {l.name}
+                {profitAndLoss.expenseLines
+                  .filter(
+                    (l) =>
+                      !hideZeroRows ||
+                      l.amountCents !== 0 ||
+                      (priorExpenseMap.get(l.code) ?? 0) !== 0
+                  )
+                  .map((l) => {
+                    const prior = priorExpenseMap.get(l.code) ?? 0;
+                    const { diffCents, pctStr } = computeVariance(l.amountCents, prior);
+                    if (!isComparing) {
+                      return (
+                        <div key={l.id} className="flex justify-between py-1">
+                          <span className="text-slate-800">
+                            {l.code} · {l.name}
+                          </span>
+                          <span className="font-mono font-medium text-slate-900">
+                            {formatCents(l.amountCents)}
+                          </span>
+                        </div>
+                      );
+                    }
+                    return (
+                      <div key={l.id} className="grid grid-cols-12 py-1 items-center">
+                        <span className="col-span-5 text-slate-800 font-medium">
+                          {l.code} · {l.name}
+                        </span>
+                        <span className="col-span-2 text-right font-mono font-medium text-slate-900">
+                          {formatCents(l.amountCents)}
+                        </span>
+                        <span className="col-span-2 text-right font-mono text-slate-500">
+                          {formatCents(prior)}
+                        </span>
+                        <span
+                          className={`col-span-2 text-right font-mono font-semibold ${
+                            diffCents > 0
+                              ? "text-rose-700"
+                              : diffCents < 0
+                              ? "text-emerald-700"
+                              : "text-slate-500"
+                          }`}
+                        >
+                          {diffCents > 0 ? "+" : ""}
+                          {formatCents(diffCents)}
+                        </span>
+                        <span className="col-span-1 text-right font-mono text-slate-600">
+                          {pctStr}
+                        </span>
+                      </div>
+                    );
+                  })}
+              </div>
+              {/* Total Expenses */}
+              {(() => {
+                const priorTotal = comparisonReports?.profitAndLoss.totalExpensesCents ?? 0;
+                const { diffCents, pctStr } = computeVariance(
+                  profitAndLoss.totalExpensesCents,
+                  priorTotal
+                );
+                return isComparing ? (
+                  <div className="grid grid-cols-12 border-t border-slate-300 pt-2 mt-2 font-bold text-slate-900 items-center">
+                    <span className="col-span-5">Total Expenses</span>
+                    <span className="col-span-2 text-right font-mono">
+                      {formatCents(profitAndLoss.totalExpensesCents)}
                     </span>
-                    <span className="font-mono font-medium text-slate-900">
-                      {formatCents(l.amountCents)}
+                    <span className="col-span-2 text-right font-mono text-slate-600">
+                      {formatCents(priorTotal)}
+                    </span>
+                    <span className="col-span-2 text-right font-mono">
+                      {diffCents > 0 ? "+" : ""}
+                      {formatCents(diffCents)}
+                    </span>
+                    <span className="col-span-1 text-right font-mono">{pctStr}</span>
+                  </div>
+                ) : (
+                  <div className="flex justify-between border-t border-slate-300 pt-2 mt-2 font-bold text-slate-900">
+                    <span>Total Expenses</span>
+                    <span className="font-mono">
+                      {formatCents(profitAndLoss.totalExpensesCents)}
                     </span>
                   </div>
-                ))}
-              </div>
-              <div className="flex justify-between border-t border-slate-300 pt-2 mt-2 font-bold text-slate-900">
-                <span>Total Expenses</span>
-                <span className="font-mono">
-                  {formatCents(profitAndLoss.totalExpensesCents)}
-                </span>
-              </div>
+                );
+              })()}
             </div>
 
-            <div className="flex justify-between border-t-2 border-b-4 border-double border-slate-900 py-3 font-bold text-base text-slate-900">
-              <span>Net Income</span>
-              <span className="font-mono text-[#2CA01C]">
-                {formatCents(profitAndLoss.netIncomeCents)}
-              </span>
-            </div>
+            {/* Net Income */}
+            {(() => {
+              const priorNet = comparisonReports?.profitAndLoss.netIncomeCents ?? 0;
+              const { diffCents, pctStr } = computeVariance(
+                profitAndLoss.netIncomeCents,
+                priorNet
+              );
+              return isComparing ? (
+                <div className="grid grid-cols-12 border-t-2 border-b-4 border-double border-slate-900 py-3 font-bold text-base text-slate-900 items-center">
+                  <span className="col-span-5">Net Income</span>
+                  <span className="col-span-2 text-right font-mono text-[#2CA01C]">
+                    {formatCents(profitAndLoss.netIncomeCents)}
+                  </span>
+                  <span className="col-span-2 text-right font-mono text-slate-600">
+                    {formatCents(priorNet)}
+                  </span>
+                  <span
+                    className={`col-span-2 text-right font-mono ${
+                      diffCents >= 0 ? "text-emerald-700" : "text-rose-700"
+                    }`}
+                  >
+                    {diffCents > 0 ? "+" : ""}
+                    {formatCents(diffCents)}
+                  </span>
+                  <span className="col-span-1 text-right font-mono text-sm">{pctStr}</span>
+                </div>
+              ) : (
+                <div className="flex justify-between border-t-2 border-b-4 border-double border-slate-900 py-3 font-bold text-base text-slate-900">
+                  <span>Net Income</span>
+                  <span className="font-mono text-[#2CA01C]">
+                    {formatCents(profitAndLoss.netIncomeCents)}
+                  </span>
+                </div>
+              );
+            })()}
           </div>
         )}
 
+        {/* ---------------- BALANCE SHEET ---------------- */}
         {reportTab === "bs" && (
           <div className="space-y-6 text-xs">
+            {isComparing && (
+              <div className="grid grid-cols-12 font-bold uppercase tracking-wider text-slate-500 border-b-2 border-slate-800 pb-2">
+                <span className="col-span-5">Account</span>
+                <span className="col-span-2 text-right">Current Period</span>
+                <span className="col-span-2 text-right">Prior Period</span>
+                <span className="col-span-2 text-right">$ Change</span>
+                <span className="col-span-1 text-right">% Change</span>
+              </div>
+            )}
+
+            {/* Assets */}
             <div>
               <h3 className="font-bold uppercase tracking-wider text-slate-500 border-b border-slate-200 pb-1.5 mb-2">
                 Assets
               </h3>
               <div className="space-y-1.5">
-                {balanceSheet.assetLines.map((l) => (
-                  <div key={l.id} className="flex justify-between py-1">
-                    <span className="text-slate-800">
-                      {l.code} · {l.name}{" "}
-                      <span className="text-slate-400">({l.type})</span>
+                {balanceSheet.assetLines
+                  .filter(
+                    (l) =>
+                      !hideZeroRows ||
+                      l.amountCents !== 0 ||
+                      (priorAssetMap.get(l.code) ?? 0) !== 0
+                  )
+                  .map((l) => {
+                    const prior = priorAssetMap.get(l.code) ?? 0;
+                    const { diffCents, pctStr } = computeVariance(l.amountCents, prior);
+                    if (!isComparing) {
+                      return (
+                        <div key={l.id} className="flex justify-between py-1">
+                          <span className="text-slate-800">
+                            {l.code} · {l.name} <span className="text-slate-400">({l.type})</span>
+                          </span>
+                          <span className="font-mono font-medium text-slate-900">
+                            {formatCents(l.amountCents)}
+                          </span>
+                        </div>
+                      );
+                    }
+                    return (
+                      <div key={l.id} className="grid grid-cols-12 py-1 items-center">
+                        <span className="col-span-5 text-slate-800">
+                          {l.code} · {l.name} <span className="text-slate-400 text-[10px]">({l.type})</span>
+                        </span>
+                        <span className="col-span-2 text-right font-mono font-medium text-slate-900">
+                          {formatCents(l.amountCents)}
+                        </span>
+                        <span className="col-span-2 text-right font-mono text-slate-500">
+                          {formatCents(prior)}
+                        </span>
+                        <span className="col-span-2 text-right font-mono font-semibold">
+                          {diffCents > 0 ? "+" : ""}
+                          {formatCents(diffCents)}
+                        </span>
+                        <span className="col-span-1 text-right font-mono text-slate-600">
+                          {pctStr}
+                        </span>
+                      </div>
+                    );
+                  })}
+              </div>
+              {(() => {
+                const priorTotal = comparisonReports?.balanceSheet.totalAssetsCents ?? 0;
+                const { diffCents, pctStr } = computeVariance(
+                  balanceSheet.totalAssetsCents,
+                  priorTotal
+                );
+                return isComparing ? (
+                  <div className="grid grid-cols-12 border-t-2 border-slate-900 pt-2 mt-2 font-bold text-sm text-slate-900 items-center">
+                    <span className="col-span-5">Total Assets</span>
+                    <span className="col-span-2 text-right font-mono">
+                      {formatCents(balanceSheet.totalAssetsCents)}
                     </span>
-                    <span className="font-mono font-medium text-slate-900">
-                      {formatCents(l.amountCents)}
+                    <span className="col-span-2 text-right font-mono text-slate-600">
+                      {formatCents(priorTotal)}
+                    </span>
+                    <span className="col-span-2 text-right font-mono">
+                      {diffCents > 0 ? "+" : ""}
+                      {formatCents(diffCents)}
+                    </span>
+                    <span className="col-span-1 text-right font-mono">{pctStr}</span>
+                  </div>
+                ) : (
+                  <div className="flex justify-between border-t-2 border-slate-900 pt-2 mt-2 font-bold text-sm text-slate-900">
+                    <span>Total Assets</span>
+                    <span className="font-mono">
+                      {formatCents(balanceSheet.totalAssetsCents)}
                     </span>
                   </div>
-                ))}
-              </div>
-              <div className="flex justify-between border-t-2 border-slate-900 pt-2 mt-2 font-bold text-sm text-slate-900">
-                <span>Total Assets</span>
-                <span className="font-mono">
-                  {formatCents(balanceSheet.totalAssetsCents)}
-                </span>
-              </div>
+                );
+              })()}
             </div>
 
+            {/* Liabilities */}
             <div>
               <h3 className="font-bold uppercase tracking-wider text-slate-500 border-b border-slate-200 pb-1.5 mb-2">
                 Liabilities
               </h3>
               <div className="space-y-1.5">
-                {balanceSheet.liabilityLines.map((l) => (
-                  <div key={l.id} className="flex justify-between py-1">
-                    <span className="text-slate-800">
-                      {l.code} · {l.name}
+                {balanceSheet.liabilityLines
+                  .filter(
+                    (l) =>
+                      !hideZeroRows ||
+                      l.amountCents !== 0 ||
+                      (priorLiabMap.get(l.code) ?? 0) !== 0
+                  )
+                  .map((l) => {
+                    const prior = priorLiabMap.get(l.code) ?? 0;
+                    const { diffCents, pctStr } = computeVariance(l.amountCents, prior);
+                    if (!isComparing) {
+                      return (
+                        <div key={l.id} className="flex justify-between py-1">
+                          <span className="text-slate-800">
+                            {l.code} · {l.name}
+                          </span>
+                          <span className="font-mono font-medium text-slate-900">
+                            {formatCents(l.amountCents)}
+                          </span>
+                        </div>
+                      );
+                    }
+                    return (
+                      <div key={l.id} className="grid grid-cols-12 py-1 items-center">
+                        <span className="col-span-5 text-slate-800">
+                          {l.code} · {l.name}
+                        </span>
+                        <span className="col-span-2 text-right font-mono font-medium text-slate-900">
+                          {formatCents(l.amountCents)}
+                        </span>
+                        <span className="col-span-2 text-right font-mono text-slate-500">
+                          {formatCents(prior)}
+                        </span>
+                        <span className="col-span-2 text-right font-mono font-semibold">
+                          {diffCents > 0 ? "+" : ""}
+                          {formatCents(diffCents)}
+                        </span>
+                        <span className="col-span-1 text-right font-mono text-slate-600">
+                          {pctStr}
+                        </span>
+                      </div>
+                    );
+                  })}
+              </div>
+              {(() => {
+                const priorTotal = comparisonReports?.balanceSheet.totalLiabilitiesCents ?? 0;
+                const { diffCents, pctStr } = computeVariance(
+                  balanceSheet.totalLiabilitiesCents,
+                  priorTotal
+                );
+                return isComparing ? (
+                  <div className="grid grid-cols-12 border-t border-slate-300 pt-2 mt-2 font-bold text-slate-900 items-center">
+                    <span className="col-span-5">Total Liabilities</span>
+                    <span className="col-span-2 text-right font-mono">
+                      {formatCents(balanceSheet.totalLiabilitiesCents)}
                     </span>
-                    <span className="font-mono font-medium text-slate-900">
-                      {formatCents(l.amountCents)}
+                    <span className="col-span-2 text-right font-mono text-slate-600">
+                      {formatCents(priorTotal)}
+                    </span>
+                    <span className="col-span-2 text-right font-mono">
+                      {diffCents > 0 ? "+" : ""}
+                      {formatCents(diffCents)}
+                    </span>
+                    <span className="col-span-1 text-right font-mono">{pctStr}</span>
+                  </div>
+                ) : (
+                  <div className="flex justify-between border-t border-slate-300 pt-2 mt-2 font-bold text-slate-900">
+                    <span>Total Liabilities</span>
+                    <span className="font-mono">
+                      {formatCents(balanceSheet.totalLiabilitiesCents)}
                     </span>
                   </div>
-                ))}
-              </div>
-              <div className="flex justify-between border-t border-slate-300 pt-2 mt-2 font-bold text-slate-900">
-                <span>Total Liabilities</span>
-                <span className="font-mono">
-                  {formatCents(balanceSheet.totalLiabilitiesCents)}
-                </span>
-              </div>
+                );
+              })()}
             </div>
 
+            {/* Equity */}
             <div>
               <h3 className="font-bold uppercase tracking-wider text-slate-500 border-b border-slate-200 pb-1.5 mb-2">
                 Equity
               </h3>
               <div className="space-y-1.5">
-                {balanceSheet.equityLines.map((l) => (
-                  <div key={l.id} className="flex justify-between py-1">
-                    <span className="text-slate-800">
-                      {l.code} · {l.name}
+                {balanceSheet.equityLines
+                  .filter(
+                    (l) =>
+                      !hideZeroRows ||
+                      l.amountCents !== 0 ||
+                      (priorEquityMap.get(l.code) ?? 0) !== 0
+                  )
+                  .map((l) => {
+                    const prior = priorEquityMap.get(l.code) ?? 0;
+                    const { diffCents, pctStr } = computeVariance(l.amountCents, prior);
+                    if (!isComparing) {
+                      return (
+                        <div key={l.id} className="flex justify-between py-1">
+                          <span className="text-slate-800">
+                            {l.code} · {l.name}
+                          </span>
+                          <span className="font-mono font-medium text-slate-900">
+                            {formatCents(l.amountCents)}
+                          </span>
+                        </div>
+                      );
+                    }
+                    return (
+                      <div key={l.id} className="grid grid-cols-12 py-1 items-center">
+                        <span className="col-span-5 text-slate-800">
+                          {l.code} · {l.name}
+                        </span>
+                        <span className="col-span-2 text-right font-mono font-medium text-slate-900">
+                          {formatCents(l.amountCents)}
+                        </span>
+                        <span className="col-span-2 text-right font-mono text-slate-500">
+                          {formatCents(prior)}
+                        </span>
+                        <span className="col-span-2 text-right font-mono font-semibold">
+                          {diffCents > 0 ? "+" : ""}
+                          {formatCents(diffCents)}
+                        </span>
+                        <span className="col-span-1 text-right font-mono text-slate-600">
+                          {pctStr}
+                        </span>
+                      </div>
+                    );
+                  })}
+                {/* Net Income (Current Period) */}
+                {(() => {
+                  const priorNet = comparisonReports?.balanceSheet.netIncomeCents ?? 0;
+                  const { diffCents, pctStr } = computeVariance(
+                    balanceSheet.netIncomeCents,
+                    priorNet
+                  );
+                  return isComparing ? (
+                    <div className="grid grid-cols-12 py-1 items-center">
+                      <span className="col-span-5 text-slate-800 font-medium">
+                        Net Income (Current Period)
+                      </span>
+                      <span className="col-span-2 text-right font-mono font-medium text-slate-900">
+                        {formatCents(balanceSheet.netIncomeCents)}
+                      </span>
+                      <span className="col-span-2 text-right font-mono text-slate-500">
+                        {formatCents(priorNet)}
+                      </span>
+                      <span className="col-span-2 text-right font-mono font-semibold">
+                        {diffCents > 0 ? "+" : ""}
+                        {formatCents(diffCents)}
+                      </span>
+                      <span className="col-span-1 text-right font-mono text-slate-600">
+                        {pctStr}
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex justify-between py-1">
+                      <span className="text-slate-800 font-medium">
+                        Net Income (Current Period)
+                      </span>
+                      <span className="font-mono font-medium text-slate-900">
+                        {formatCents(balanceSheet.netIncomeCents)}
+                      </span>
+                    </div>
+                  );
+                })()}
+              </div>
+              {(() => {
+                const priorTotal = comparisonReports?.balanceSheet.totalEquityCents ?? 0;
+                const { diffCents, pctStr } = computeVariance(
+                  balanceSheet.totalEquityCents,
+                  priorTotal
+                );
+                return isComparing ? (
+                  <div className="grid grid-cols-12 border-t border-slate-300 pt-2 mt-2 font-bold text-slate-900 items-center">
+                    <span className="col-span-5">Total Equity</span>
+                    <span className="col-span-2 text-right font-mono">
+                      {formatCents(balanceSheet.totalEquityCents)}
                     </span>
-                    <span className="font-mono font-medium text-slate-900">
-                      {formatCents(l.amountCents)}
+                    <span className="col-span-2 text-right font-mono text-slate-600">
+                      {formatCents(priorTotal)}
+                    </span>
+                    <span className="col-span-2 text-right font-mono">
+                      {diffCents > 0 ? "+" : ""}
+                      {formatCents(diffCents)}
+                    </span>
+                    <span className="col-span-1 text-right font-mono">{pctStr}</span>
+                  </div>
+                ) : (
+                  <div className="flex justify-between border-t border-slate-300 pt-2 mt-2 font-bold text-slate-900">
+                    <span>Total Equity</span>
+                    <span className="font-mono">
+                      {formatCents(balanceSheet.totalEquityCents)}
                     </span>
                   </div>
-                ))}
-                <div className="flex justify-between py-1">
-                  <span className="text-slate-800 font-medium">
-                    Net Income (Current Period)
-                  </span>
-                  <span className="font-mono font-medium text-slate-900">
-                    {formatCents(balanceSheet.netIncomeCents)}
-                  </span>
-                </div>
-              </div>
-              <div className="flex justify-between border-t border-slate-300 pt-2 mt-2 font-bold text-slate-900">
-                <span>Total Equity</span>
-                <span className="font-mono">
-                  {formatCents(balanceSheet.totalEquityCents)}
-                </span>
-              </div>
+                );
+              })()}
             </div>
 
-            <div className="flex justify-between border-t-2 border-b-4 border-double border-slate-900 py-3 font-bold text-base text-slate-900">
-              <span className="flex items-center gap-2">
-                Total Liabilities and Equity
-                {balanceSheet.isBalanced && (
-                  <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-bold text-[#2CA01C]">
-                    ✓ Matches Total Assets
+            {/* Total Liabilities & Equity */}
+            {(() => {
+              const priorTotal =
+                comparisonReports?.balanceSheet.totalLiabilitiesAndEquityCents ?? 0;
+              const { diffCents, pctStr } = computeVariance(
+                balanceSheet.totalLiabilitiesAndEquityCents,
+                priorTotal
+              );
+              return isComparing ? (
+                <div className="grid grid-cols-12 border-t-2 border-b-4 border-double border-slate-900 py-3 font-bold text-base text-slate-900 items-center">
+                  <span className="col-span-5 flex items-center gap-2">
+                    Total Liabilities and Equity
+                    {balanceSheet.isBalanced && (
+                      <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-[#2CA01C]">
+                        ✓ Balanced
+                      </span>
+                    )}
                   </span>
-                )}
-              </span>
-              <span className="font-mono text-[#2CA01C]">
-                {formatCents(balanceSheet.totalLiabilitiesAndEquityCents)}
-              </span>
-            </div>
+                  <span className="col-span-2 text-right font-mono text-[#2CA01C]">
+                    {formatCents(balanceSheet.totalLiabilitiesAndEquityCents)}
+                  </span>
+                  <span className="col-span-2 text-right font-mono text-slate-600">
+                    {formatCents(priorTotal)}
+                  </span>
+                  <span className="col-span-2 text-right font-mono">
+                    {diffCents > 0 ? "+" : ""}
+                    {formatCents(diffCents)}
+                  </span>
+                  <span className="col-span-1 text-right font-mono text-sm">{pctStr}</span>
+                </div>
+              ) : (
+                <div className="flex justify-between border-t-2 border-b-4 border-double border-slate-900 py-3 font-bold text-base text-slate-900">
+                  <span className="flex items-center gap-2">
+                    Total Liabilities and Equity
+                    {balanceSheet.isBalanced && (
+                      <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-bold text-[#2CA01C]">
+                        ✓ Matches Total Assets
+                      </span>
+                    )}
+                  </span>
+                  <span className="font-mono text-[#2CA01C]">
+                    {formatCents(balanceSheet.totalLiabilitiesAndEquityCents)}
+                  </span>
+                </div>
+              );
+            })()}
           </div>
         )}
 
+        {/* ---------------- TRIAL BALANCE ---------------- */}
         {reportTab === "tb" && (
           <table className="w-full text-left text-xs">
             <thead className="border-b-2 border-slate-800 text-slate-600 uppercase">
               <tr>
                 <th className="py-2">Account</th>
                 <th className="py-2">Type</th>
-                <th className="py-2 text-right">Debit</th>
-                <th className="py-2 text-right">Credit</th>
+                {isComparing ? (
+                  <>
+                    <th className="py-2 text-right">Cur Debit</th>
+                    <th className="py-2 text-right">Cur Credit</th>
+                    <th className="py-2 text-right text-slate-400">Prior Debit</th>
+                    <th className="py-2 text-right text-slate-400">Prior Credit</th>
+                  </>
+                ) : (
+                  <>
+                    <th className="py-2 text-right">Debit</th>
+                    <th className="py-2 text-right">Credit</th>
+                  </>
+                )}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {trialBalance.rows.map((r) => (
-                <tr key={r.accountId}>
-                  <td className="py-2 font-medium text-slate-900">
-                    <span className="font-mono text-slate-500 mr-2">
-                      {r.code}
-                    </span>
-                    {r.name}
-                  </td>
-                  <td className="py-2 text-slate-500">{r.type}</td>
-                  <td className="py-2 text-right font-mono">
-                    {r.debitBalanceCents > 0
-                      ? formatCents(r.debitBalanceCents)
-                      : ""}
-                  </td>
-                  <td className="py-2 text-right font-mono">
-                    {r.creditBalanceCents > 0
-                      ? formatCents(r.creditBalanceCents)
-                      : ""}
-                  </td>
-                </tr>
-              ))}
+              {trialBalance.rows
+                .filter(
+                  (r) =>
+                    !hideZeroRows ||
+                    r.debitBalanceCents !== 0 ||
+                    r.creditBalanceCents !== 0 ||
+                    ((priorTbMap.get(r.code)?.debitBalanceCents ?? 0) !== 0) ||
+                    ((priorTbMap.get(r.code)?.creditBalanceCents ?? 0) !== 0)
+                )
+                .map((r) => {
+                  const prior = priorTbMap.get(r.code);
+                  return (
+                    <tr key={r.accountId} className="hover:bg-slate-50">
+                      <td className="py-2 font-medium text-slate-900">
+                        <span className="font-mono text-slate-500 mr-2">
+                          {r.code}
+                        </span>
+                        {r.name}
+                      </td>
+                      <td className="py-2 text-slate-500">{r.type}</td>
+                      {isComparing ? (
+                        <>
+                          <td className="py-2 text-right font-mono">
+                            {r.debitBalanceCents > 0 ? formatCents(r.debitBalanceCents) : ""}
+                          </td>
+                          <td className="py-2 text-right font-mono">
+                            {r.creditBalanceCents > 0 ? formatCents(r.creditBalanceCents) : ""}
+                          </td>
+                          <td className="py-2 text-right font-mono text-slate-500">
+                            {(prior?.debitBalanceCents ?? 0) > 0 ? formatCents(prior!.debitBalanceCents) : ""}
+                          </td>
+                          <td className="py-2 text-right font-mono text-slate-500">
+                            {(prior?.creditBalanceCents ?? 0) > 0 ? formatCents(prior!.creditBalanceCents) : ""}
+                          </td>
+                        </>
+                      ) : (
+                        <>
+                          <td className="py-2 text-right font-mono">
+                            {r.debitBalanceCents > 0
+                              ? formatCents(r.debitBalanceCents)
+                              : ""}
+                          </td>
+                          <td className="py-2 text-right font-mono">
+                            {r.creditBalanceCents > 0
+                              ? formatCents(r.creditBalanceCents)
+                              : ""}
+                          </td>
+                        </>
+                      )}
+                    </tr>
+                  );
+                })}
             </tbody>
             <tfoot className="border-t-2 border-b-4 border-double border-slate-900 font-bold text-sm">
               <tr>
@@ -2438,17 +3358,37 @@ export function ReportsCenterView({ state }: ViewProps) {
                     </span>
                   )}
                 </td>
-                <td className="py-3 text-right font-mono">
-                  {formatCents(trialBalance.totalDebitsCents)}
-                </td>
-                <td className="py-3 text-right font-mono">
-                  {formatCents(trialBalance.totalCreditsCents)}
-                </td>
+                {isComparing ? (
+                  <>
+                    <td className="py-3 text-right font-mono">
+                      {formatCents(trialBalance.totalDebitsCents)}
+                    </td>
+                    <td className="py-3 text-right font-mono">
+                      {formatCents(trialBalance.totalCreditsCents)}
+                    </td>
+                    <td className="py-3 text-right font-mono text-slate-600">
+                      {formatCents(comparisonReports?.trialBalance.totalDebitsCents ?? 0)}
+                    </td>
+                    <td className="py-3 text-right font-mono text-slate-600">
+                      {formatCents(comparisonReports?.trialBalance.totalCreditsCents ?? 0)}
+                    </td>
+                  </>
+                ) : (
+                  <>
+                    <td className="py-3 text-right font-mono">
+                      {formatCents(trialBalance.totalDebitsCents)}
+                    </td>
+                    <td className="py-3 text-right font-mono">
+                      {formatCents(trialBalance.totalCreditsCents)}
+                    </td>
+                  </>
+                )}
               </tr>
             </tfoot>
           </table>
         )}
 
+        {/* ---------------- AGING SUMMARIES (A/R & A/P) ---------------- */}
         {(reportTab === "ar_aging" || reportTab === "ap_aging") && (
           <table className="w-full text-left text-xs">
             <thead className="border-b-2 border-slate-800 text-slate-600 uppercase">
@@ -2464,9 +3404,10 @@ export function ReportsCenterView({ state }: ViewProps) {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {(reportTab === "ar_aging" ? arAging.rows : apAging.rows).map(
-                (r) => (
-                  <tr key={r.entityId}>
+              {(reportTab === "ar_aging" ? arAging.rows : apAging.rows)
+                .filter((r) => !hideZeroRows || r.totalCents !== 0)
+                .map((r) => (
+                  <tr key={r.entityId} className="hover:bg-slate-50">
                     <td className="py-2.5 font-semibold text-slate-900">
                       {r.entityName}
                     </td>
@@ -2486,8 +3427,7 @@ export function ReportsCenterView({ state }: ViewProps) {
                       {formatCents(r.totalCents)}
                     </td>
                   </tr>
-                )
-              )}
+                ))}
             </tbody>
             <tfoot className="border-t-2 border-b-4 border-double border-slate-900 font-bold text-sm">
               <tr>
@@ -2509,59 +3449,74 @@ export function ReportsCenterView({ state }: ViewProps) {
           </table>
         )}
 
+        {/* ---------------- GENERAL LEDGER ---------------- */}
         {reportTab === "gl" && (
           <div className="space-y-6 text-xs">
-            {generalLedger.map((acc) => (
-              <div
-                key={acc.accountId}
-                className="border border-slate-200 rounded-lg overflow-hidden"
-              >
-                <div className="bg-[#F4F5F8] px-4 py-2.5 flex justify-between font-bold text-slate-900">
-                  <span>
-                    {acc.accountCode} — {acc.accountName} ({acc.accountType})
-                  </span>
-                  <span className="font-mono">
-                    Ending: {formatCents(acc.endingBalanceCents)}
-                  </span>
-                </div>
-                <table className="w-full text-left text-xs">
-                  <thead className="border-b border-slate-100 text-slate-400">
-                    <tr>
-                      <th className="px-4 py-1.5">Date</th>
-                      <th className="px-4 py-1.5">Entry</th>
-                      <th className="px-4 py-1.5">Description</th>
-                      <th className="px-4 py-1.5 text-right">Debit</th>
-                      <th className="px-4 py-1.5 text-right">Credit</th>
-                      <th className="px-4 py-1.5 text-right">Balance</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {acc.movements.map((m, idx) => (
-                      <tr key={idx}>
-                        <td className="px-4 py-1.5 font-mono text-slate-600">
-                          {m.date}
-                        </td>
-                        <td className="px-4 py-1.5 font-mono font-semibold">
-                          {m.entryNumber}
-                        </td>
-                        <td className="px-4 py-1.5 text-slate-700">
-                          {m.description}
-                        </td>
-                        <td className="px-4 py-1.5 text-right font-mono">
-                          {m.debitCents > 0 ? formatCents(m.debitCents) : ""}
-                        </td>
-                        <td className="px-4 py-1.5 text-right font-mono">
-                          {m.creditCents > 0 ? formatCents(m.creditCents) : ""}
-                        </td>
-                        <td className="px-4 py-1.5 text-right font-mono font-semibold">
-                          {formatCents(m.runningBalanceCents)}
-                        </td>
+            {generalLedger
+              .filter(
+                (acc) =>
+                  (!hideZeroRows || acc.endingBalanceCents !== 0 || acc.movements.length > 0) &&
+                  (!accountFilter || acc.accountId === accountFilter)
+              )
+              .map((acc) => (
+                <div
+                  key={acc.accountId}
+                  className="border border-slate-200 rounded-lg overflow-hidden"
+                >
+                  <div className="bg-[#F4F5F8] px-4 py-2.5 flex justify-between font-bold text-slate-900">
+                    <span>
+                      {acc.accountCode} — {acc.accountName} ({acc.accountType})
+                    </span>
+                    <span className="font-mono">
+                      Ending: {formatCents(acc.endingBalanceCents)}
+                    </span>
+                  </div>
+                  <table className="w-full text-left text-xs">
+                    <thead className="border-b border-slate-100 text-slate-400">
+                      <tr>
+                        <th className="px-4 py-1.5">Date</th>
+                        <th className="px-4 py-1.5">Entry</th>
+                        <th className="px-4 py-1.5">Description</th>
+                        <th className="px-4 py-1.5 text-right">Debit</th>
+                        <th className="px-4 py-1.5 text-right">Credit</th>
+                        <th className="px-4 py-1.5 text-right">Balance</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ))}
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {acc.movements.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="px-4 py-2.5 text-slate-400 italic text-center">
+                            No journal transactions in selected period
+                          </td>
+                        </tr>
+                      ) : (
+                        acc.movements.map((m, idx) => (
+                          <tr key={idx} className="hover:bg-slate-50">
+                            <td className="px-4 py-1.5 font-mono text-slate-600">
+                              {m.date}
+                            </td>
+                            <td className="px-4 py-1.5 font-mono font-semibold">
+                              {m.entryNumber}
+                            </td>
+                            <td className="px-4 py-1.5 text-slate-700">
+                              {m.description}
+                            </td>
+                            <td className="px-4 py-1.5 text-right font-mono">
+                              {m.debitCents > 0 ? formatCents(m.debitCents) : ""}
+                            </td>
+                            <td className="px-4 py-1.5 text-right font-mono">
+                              {m.creditCents > 0 ? formatCents(m.creditCents) : ""}
+                            </td>
+                            <td className="px-4 py-1.5 text-right font-mono font-semibold">
+                              {formatCents(m.runningBalanceCents)}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              ))}
           </div>
         )}
       </div>

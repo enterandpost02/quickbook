@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   BookOpenCheck,
   Building2,
@@ -18,10 +18,19 @@ import {
   RotateCcw,
   Scale,
   ScrollText,
+  Search,
   Settings,
   Upload,
+  X,
 } from "lucide-react";
 import type { ComputedQboState } from "@/lib/qbo-store";
+import {
+  searchQboState,
+  SEARCH_KIND_LABELS,
+  type QboSearchResult,
+  type QboSearchResultKind,
+} from "@/lib/qbo-search";
+import { formatCents } from "@/lib/money";
 import { QboModals, type ActiveModalType } from "./qbo-modals";
 import {
   AuditLogView,
@@ -56,6 +65,80 @@ export function QboWorkspace({
     type: "success" | "error";
     message: string;
   } | null>(null);
+
+  // Top Global Search State
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
+
+  const searchResults = searchQuery.trim()
+    ? searchQboState(state, searchQuery, 5)
+    : [];
+
+  // Group search results by kind
+  const searchResultsByKind = searchResults.reduce<
+    Record<string, QboSearchResult[]>
+  >((acc, res) => {
+    acc[res.kind] = acc[res.kind] ?? [];
+    acc[res.kind].push(res);
+    return acc;
+  }, {});
+
+  const KIND_TO_TAB: Record<QboSearchResultKind, QboNavTab> = {
+    customer: "sales",
+    vendor: "expenses",
+    invoice: "sales",
+    estimate: "sales",
+    expense: "expenses",
+    bank_transaction: "banking",
+    account: "coa",
+    journal_entry: "journals",
+    product: "sales",
+  };
+
+  function handleSelectSearchResult(result: QboSearchResult) {
+    setActiveTab(KIND_TO_TAB[result.kind]);
+    setIsSearchOpen(false);
+    setSearchQuery("");
+  }
+
+  // Keyboard shortcut listener for Ctrl+K, Cmd+K, and /
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setIsSearchOpen(true);
+        searchInputRef.current?.focus();
+      } else if (
+        e.key === "/" &&
+        document.activeElement?.tagName !== "INPUT" &&
+        document.activeElement?.tagName !== "TEXTAREA"
+      ) {
+        e.preventDefault();
+        setIsSearchOpen(true);
+        searchInputRef.current?.focus();
+      } else if (e.key === "Escape") {
+        setIsSearchOpen(false);
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  // Close search when clicking outside
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (
+        searchContainerRef.current &&
+        !searchContainerRef.current.contains(e.target as Node)
+      ) {
+        setIsSearchOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   function showToast(type: "success" | "error", message: string) {
     setToast({ type, message });
@@ -325,6 +408,108 @@ export function QboWorkspace({
                 ? "Accountant (Read-Only)"
                 : state.activeRole}
             </button>
+          </div>
+
+          {/* Global QuickBooks Search Bar */}
+          <div
+            ref={searchContainerRef}
+            className="relative flex-1 max-w-md mx-4 hidden sm:block"
+          >
+            <div className="relative">
+              <Search className="h-4 w-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setIsSearchOpen(true);
+                }}
+                onFocus={() => setIsSearchOpen(true)}
+                placeholder="Search transactions, customers, vendors, accounts (Ctrl+K or /)..."
+                className="w-full rounded-full border border-slate-200 bg-slate-50/90 pl-9 pr-14 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-[#2CA01C] focus:ring-1 focus:ring-[#2CA01C] focus:outline-none transition-all shadow-2xs"
+              />
+              {searchQuery ? (
+                <button
+                  onClick={() => {
+                    setSearchQuery("");
+                    searchInputRef.current?.focus();
+                  }}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-slate-400 hover:text-slate-600 hover:bg-slate-200"
+                  title="Clear search"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              ) : (
+                <kbd className="hidden lg:inline-block absolute right-3 top-1/2 -translate-y-1/2 rounded border border-slate-300 bg-white px-1.5 py-0.5 text-[10px] font-mono text-slate-400 shadow-2xs pointer-events-none">
+                  Ctrl+K
+                </kbd>
+              )}
+            </div>
+
+            {/* Search Dropdown Popover */}
+            {isSearchOpen && searchQuery.trim().length > 0 && (
+              <div className="absolute left-0 right-0 mt-2 rounded-xl border border-slate-200 bg-white shadow-2xl z-50 overflow-hidden max-h-[75vh] flex flex-col animate-in fade-in slide-in-from-top-1 duration-150">
+                <div className="px-3.5 py-2 bg-slate-50 border-b border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                  <span className="font-semibold">
+                    Search results for <span className="text-slate-900 font-bold">&quot;{searchQuery.trim()}&quot;</span>
+                  </span>
+                  <span className="text-[11px] font-mono">
+                    {searchResults.length} match{searchResults.length === 1 ? "" : "es"}
+                  </span>
+                </div>
+
+                <div className="overflow-y-auto divide-y divide-slate-100 p-1">
+                  {searchResults.length === 0 ? (
+                    <div className="py-8 px-4 text-center">
+                      <Search className="h-8 w-8 text-slate-300 mx-auto mb-2" />
+                      <p className="text-xs font-semibold text-slate-700">
+                        No matching records found
+                      </p>
+                      <p className="text-[11px] text-slate-400 mt-1 max-w-xs mx-auto">
+                        Try searching by invoice #, vendor or customer name, chart of accounts code, or dollar amount (e.g. &quot;$1,250&quot;).
+                      </p>
+                    </div>
+                  ) : (
+                    Object.entries(searchResultsByKind).map(([kind, items]) => (
+                      <div key={kind} className="py-1">
+                        <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 bg-slate-50/50">
+                          {SEARCH_KIND_LABELS[kind as QboSearchResultKind] ?? kind} ({items.length})
+                        </div>
+                        <div className="divide-y divide-slate-50">
+                          {items.map((item) => (
+                            <button
+                              key={`${item.kind}-${item.id}`}
+                              onClick={() => handleSelectSearchResult(item)}
+                              className="w-full text-left px-3 py-2 hover:bg-emerald-50/60 rounded-md flex items-center justify-between gap-3 transition-colors group"
+                            >
+                              <div className="min-w-0 flex-1">
+                                <div className="text-xs font-bold text-slate-800 group-hover:text-[#2CA01C] truncate">
+                                  {item.title}
+                                </div>
+                                <div className="text-[11px] text-slate-500 truncate mt-0.5">
+                                  {item.subtitle}
+                                </div>
+                              </div>
+                              {item.amountCents !== undefined && (
+                                <span className="shrink-0 font-mono text-xs font-bold text-slate-900 bg-slate-100 group-hover:bg-white px-2 py-0.5 rounded border border-slate-200">
+                                  {formatCents(item.amountCents)}
+                                </span>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <div className="px-3 py-2 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400">
+                  <span>Press <kbd className="font-mono bg-white border border-slate-200 px-1 py-0.5 rounded">Esc</kbd> to close</span>
+                  <span>Click any item to navigate</span>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-3">

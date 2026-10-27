@@ -79,12 +79,13 @@ quickboooks/
 │   │   └── schema.ts              # Multi-tenant Drizzle tables (organizations, users, organization_members)
 │   └── lib/
 │       ├── __tests__/
-│       │   └── qbo-engine.test.ts # 10 automated unit & integration tests (npm test)
+│       │   └── qbo-engine.test.ts # 18 automated unit & integration tests (npm test)
 │       ├── auth.ts                # Cookie session management
 │       ├── csv-parser.ts          # Multi-bank CSV parser, column mapper & currency/date normalizer
 │       ├── money.ts               # Integer-cents conversion, formatting, and balance verification helpers
 │       ├── qbo-db.ts              # PostgreSQL (Supabase/Neon + PGlite fallback) persistence adapter
-│       ├── qbo-store.ts           # Double-Entry Accounting Engine & Sample Company Seed
+│       ├── qbo-search.ts          # Global multi-entity search engine with exact amount matching
+│       ├── qbo-store.ts           # Double-Entry Accounting Engine, Reports, Comparison & Seed
 │       └── sample-bank-csvs.ts    # 4 realistic bank CSV presets (Chase, BofA, Amex, Wells Fargo)
 ├── CLAUDE.md                      # AI assistant instructions & mandatory doc update rules
 ├── README-dev.md                  # Developer onboarding & core rules

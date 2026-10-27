@@ -2095,7 +2095,16 @@ function CreateExpenseModal({
               type="text"
               list="qbo-vendors-list"
               value={vendorName}
-              onChange={(e) => setVendorName(e.target.value)}
+              onChange={(e) => {
+                const val = e.target.value;
+                setVendorName(val);
+                const matched = state.vendors.find(
+                  (v) => v.name.toLowerCase() === val.trim().toLowerCase()
+                );
+                if (matched?.defaultExpenseAccountId) {
+                  setCategoryAccountId(matched.defaultExpenseAccountId);
+                }
+              }}
               required
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             />
@@ -2374,30 +2383,55 @@ function CreateCustomerModal({
   ) => Promise<void>;
   isSubmitting: boolean;
 }) {
-  const [name, setName] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [company, setCompany] = useState("");
+  const [taxId, setTaxId] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [street, setStreet] = useState("");
+  const [city, setCity] = useState("");
+  const [stateProv, setStateProv] = useState("");
+  const [postalCode, setPostalCode] = useState("");
+
+  const effectiveDisplayName =
+    displayName.trim() ||
+    [firstName.trim(), lastName.trim()].filter(Boolean).join(" ") ||
+    company.trim();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!name.trim()) return;
+    if (!effectiveDisplayName) return;
     await runAction(
       "create_customer",
       {
-        name: name.trim(),
-        company: company.trim() || name.trim(),
-        email: email.trim(),
-        phone: phone.trim(),
+        name: displayName.trim() || undefined,
+        firstName: firstName.trim() || undefined,
+        lastName: lastName.trim() || undefined,
+        company: company.trim() || undefined,
+        taxId: taxId.trim() || undefined,
+        email: email.trim() || undefined,
+        phone: phone.trim() || undefined,
+        address:
+          street.trim() || city.trim() || stateProv.trim() || postalCode.trim()
+            ? {
+                street: street.trim() || undefined,
+                city: city.trim() || undefined,
+                state: stateProv.trim() || undefined,
+                postalCode: postalCode.trim() || undefined,
+                country: "USA",
+              }
+            : undefined,
       },
-      `Added customer "${name.trim()}" to Customer Directory`
+      `Added customer "${effectiveDisplayName}" to Customer Directory`
     );
     onClose();
   }
 
   return (
-    <div className="w-full max-w-lg rounded-xl bg-white shadow-2xl border border-slate-200 overflow-hidden">
-      <div className="flex items-center justify-between px-6 py-4 bg-[#1E252B] text-white">
+    <div className="w-full max-w-xl rounded-xl bg-white shadow-2xl border border-slate-200 overflow-hidden max-h-[90vh] flex flex-col">
+      <div className="flex items-center justify-between px-6 py-4 bg-[#1E252B] text-white shrink-0">
         <div className="flex items-center gap-2">
           <Plus className="h-5 w-5 text-[#2CA01C]" />
           <div>
@@ -2415,31 +2449,30 @@ function CreateCustomerModal({
         </button>
       </div>
 
-      <form onSubmit={handleSubmit} className="p-6 space-y-4">
+      <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
-              Customer Display Name *
+              First Name <span className="text-slate-400 font-normal lowercase">(optional)</span>
             </label>
             <input
               type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Redwood Tech Campus"
-              required
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+              placeholder="e.g. Sarah"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#2CA01C] focus:outline-none"
             />
           </div>
           <div>
             <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
-              Company Name
+              Last Name <span className="text-slate-400 font-normal lowercase">(optional)</span>
             </label>
             <input
               type="text"
-              value={company}
-              onChange={(e) => setCompany(e.target.value)}
-              placeholder="e.g. Redwood Properties LLC"
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+              placeholder="e.g. Jenkins"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#2CA01C] focus:outline-none"
             />
           </div>
         </div>
@@ -2447,27 +2480,120 @@ function CreateCustomerModal({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
-              Email Address
+              Customer Display Name *
             </label>
             <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="ap@redwoodcampus.com"
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              type="text"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              placeholder={
+                [firstName.trim(), lastName.trim()].filter(Boolean).join(" ") ||
+                company.trim() ||
+                "e.g. Redwood Tech Campus"
+              }
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#2CA01C] focus:outline-none"
             />
           </div>
           <div>
             <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
-              Phone Number
+              Company Name <span className="text-slate-400 font-normal lowercase">(optional)</span>
+            </label>
+            <input
+              type="text"
+              value={company}
+              onChange={(e) => setCompany(e.target.value)}
+              placeholder="e.g. Redwood Properties LLC"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#2CA01C] focus:outline-none"
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
+              Tax ID / SSN / EIN <span className="text-slate-400 font-normal lowercase">(optional)</span>
+            </label>
+            <input
+              type="text"
+              value={taxId}
+              onChange={(e) => setTaxId(e.target.value)}
+              placeholder="XX-XXXXXXX"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#2CA01C] focus:outline-none"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
+              Phone Number <span className="text-slate-400 font-normal lowercase">(optional)</span>
             </label>
             <input
               type="text"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               placeholder="(650) 555-0192"
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#2CA01C] focus:outline-none"
             />
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
+            Email Address <span className="text-slate-400 font-normal lowercase">(optional)</span>
+          </label>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="billing@redwoodcampus.com"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#2CA01C] focus:outline-none"
+          />
+        </div>
+
+        {/* Address Fields */}
+        <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-3.5 space-y-3">
+          <div className="text-xs font-bold uppercase tracking-wider text-slate-600">
+            Billing Address <span className="text-slate-400 font-normal lowercase">(optional)</span>
+          </div>
+          <div>
+            <label className="block text-[11px] font-medium text-slate-500 mb-0.5">Street Address</label>
+            <input
+              type="text"
+              value={street}
+              onChange={(e) => setStreet(e.target.value)}
+              placeholder="e.g. 100 Main St, Suite 400"
+              className="w-full rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs focus:border-[#2CA01C] focus:outline-none"
+            />
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <div>
+              <label className="block text-[11px] font-medium text-slate-500 mb-0.5">City</label>
+              <input
+                type="text"
+                value={city}
+                onChange={(e) => setCity(e.target.value)}
+                placeholder="San Jose"
+                className="w-full rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs focus:border-[#2CA01C] focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-slate-500 mb-0.5">State</label>
+              <input
+                type="text"
+                value={stateProv}
+                onChange={(e) => setStateProv(e.target.value)}
+                placeholder="CA"
+                className="w-full rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs focus:border-[#2CA01C] focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-slate-500 mb-0.5">Postal / ZIP</label>
+              <input
+                type="text"
+                value={postalCode}
+                onChange={(e) => setPostalCode(e.target.value)}
+                placeholder="95113"
+                className="w-full rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs focus:border-[#2CA01C] focus:outline-none"
+              />
+            </div>
           </div>
         </div>
 
@@ -2481,7 +2607,7 @@ function CreateCustomerModal({
           </button>
           <button
             type="submit"
-            disabled={isSubmitting || !name.trim()}
+            disabled={isSubmitting || !effectiveDisplayName}
             className="rounded-full bg-[#2CA01C] px-6 py-2 text-sm font-semibold text-white hover:bg-[#248217] disabled:opacity-50"
           >
             {isSubmitting ? "Saving..." : "Save Customer"}
@@ -2514,32 +2640,57 @@ function CreateVendorModal({
   const expenseAccounts = state.accounts.filter(
     (a) => a.type === "Expenses" || a.type === "Cost of Goods Sold"
   );
-  const [name, setName] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [company, setCompany] = useState("");
+  const [taxId, setTaxId] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
-  const [defaultExpenseAccountId, setDefaultExpenseAccountId] = useState(
-    expenseAccounts[0]?.id ?? "acc-5010"
-  );
+  const [defaultExpenseAccountId, setDefaultExpenseAccountId] = useState("");
+  const [street, setStreet] = useState("");
+  const [city, setCity] = useState("");
+  const [stateProv, setStateProv] = useState("");
+  const [postalCode, setPostalCode] = useState("");
+
+  const effectiveDisplayName =
+    displayName.trim() ||
+    [firstName.trim(), lastName.trim()].filter(Boolean).join(" ") ||
+    company.trim();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!name.trim()) return;
+    if (!effectiveDisplayName) return;
     await runAction(
       "create_vendor",
       {
-        name: name.trim(),
-        email: email.trim(),
-        phone: phone.trim(),
-        defaultExpenseAccountId,
+        name: displayName.trim() || undefined,
+        firstName: firstName.trim() || undefined,
+        lastName: lastName.trim() || undefined,
+        company: company.trim() || undefined,
+        taxId: taxId.trim() || undefined,
+        email: email.trim() || undefined,
+        phone: phone.trim() || undefined,
+        defaultExpenseAccountId: defaultExpenseAccountId || undefined,
+        address:
+          street.trim() || city.trim() || stateProv.trim() || postalCode.trim()
+            ? {
+                street: street.trim() || undefined,
+                city: city.trim() || undefined,
+                state: stateProv.trim() || undefined,
+                postalCode: postalCode.trim() || undefined,
+                country: "USA",
+              }
+            : undefined,
       },
-      `Added vendor "${name.trim()}" to Vendor Directory`
+      `Added vendor "${effectiveDisplayName}" to Vendor Directory`
     );
     onClose();
   }
 
   return (
-    <div className="w-full max-w-lg rounded-xl bg-white shadow-2xl border border-slate-200 overflow-hidden">
-      <div className="flex items-center justify-between px-6 py-4 bg-[#1E252B] text-white">
+    <div className="w-full max-w-xl rounded-xl bg-white shadow-2xl border border-slate-200 overflow-hidden max-h-[90vh] flex flex-col">
+      <div className="flex items-center justify-between px-6 py-4 bg-[#1E252B] text-white shrink-0">
         <div className="flex items-center gap-2">
           <Plus className="h-5 w-5 text-[#2CA01C]" />
           <div>
@@ -2557,63 +2708,173 @@ function CreateVendorModal({
         </button>
       </div>
 
-      <form onSubmit={handleSubmit} className="p-6 space-y-4">
-        <div>
-          <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
-            Vendor / Supplier Name *
-          </label>
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. Pacific Stone & Paver Supply"
-            required
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-          />
+      <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
+              First Name <span className="text-slate-400 font-normal lowercase">(optional)</span>
+            </label>
+            <input
+              type="text"
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+              placeholder="e.g. John"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#2CA01C] focus:outline-none"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
+              Last Name <span className="text-slate-400 font-normal lowercase">(optional)</span>
+            </label>
+            <input
+              type="text"
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+              placeholder="e.g. Miller"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#2CA01C] focus:outline-none"
+            />
+          </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
-              Email Address
+              Vendor Display Name *
             </label>
             <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="billing@pacificstone.com"
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              type="text"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              placeholder={
+                [firstName.trim(), lastName.trim()].filter(Boolean).join(" ") ||
+                company.trim() ||
+                "e.g. Pacific Stone & Paver Supply"
+              }
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#2CA01C] focus:outline-none"
             />
           </div>
           <div>
             <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
-              Phone Number
+              Company Name <span className="text-slate-400 font-normal lowercase">(optional)</span>
+            </label>
+            <input
+              type="text"
+              value={company}
+              onChange={(e) => setCompany(e.target.value)}
+              placeholder="e.g. Pacific Stone Supply LLC"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#2CA01C] focus:outline-none"
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
+              Tax ID / EIN / 1099 <span className="text-slate-400 font-normal lowercase">(optional)</span>
+            </label>
+            <input
+              type="text"
+              value={taxId}
+              onChange={(e) => setTaxId(e.target.value)}
+              placeholder="XX-XXXXXXX"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#2CA01C] focus:outline-none"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
+              Phone Number <span className="text-slate-400 font-normal lowercase">(optional)</span>
             </label>
             <input
               type="text"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               placeholder="(650) 555-0177"
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#2CA01C] focus:outline-none"
             />
           </div>
         </div>
 
         <div>
           <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
-            Default Expense / COGS Account
+            Email Address <span className="text-slate-400 font-normal lowercase">(optional)</span>
+          </label>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="billing@pacificstone.com"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#2CA01C] focus:outline-none"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
+            Default Expense / COGS Account <span className="text-slate-400 font-normal lowercase">(optional)</span>
           </label>
           <select
             value={defaultExpenseAccountId}
             onChange={(e) => setDefaultExpenseAccountId(e.target.value)}
-            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-[#2CA01C] focus:outline-none"
           >
+            <option value="">— Optional / Select per transaction —</option>
             {expenseAccounts.map((a) => (
               <option key={a.id} value={a.id}>
                 {a.code} — {a.name} ({a.type})
               </option>
             ))}
           </select>
+          <p className="mt-1 text-[11px] text-slate-500">
+            If selected, new expenses or bills for this vendor will auto-populate with this category.
+          </p>
+        </div>
+
+        {/* Address Fields */}
+        <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-3.5 space-y-3">
+          <div className="text-xs font-bold uppercase tracking-wider text-slate-600">
+            Vendor Address <span className="text-slate-400 font-normal lowercase">(optional)</span>
+          </div>
+          <div>
+            <label className="block text-[11px] font-medium text-slate-500 mb-0.5">Street Address</label>
+            <input
+              type="text"
+              value={street}
+              onChange={(e) => setStreet(e.target.value)}
+              placeholder="e.g. 742 Industrial Pkwy"
+              className="w-full rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs focus:border-[#2CA01C] focus:outline-none"
+            />
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <div>
+              <label className="block text-[11px] font-medium text-slate-500 mb-0.5">City</label>
+              <input
+                type="text"
+                value={city}
+                onChange={(e) => setCity(e.target.value)}
+                placeholder="Oakland"
+                className="w-full rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs focus:border-[#2CA01C] focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-slate-500 mb-0.5">State</label>
+              <input
+                type="text"
+                value={stateProv}
+                onChange={(e) => setStateProv(e.target.value)}
+                placeholder="CA"
+                className="w-full rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs focus:border-[#2CA01C] focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-slate-500 mb-0.5">Postal / ZIP</label>
+              <input
+                type="text"
+                value={postalCode}
+                onChange={(e) => setPostalCode(e.target.value)}
+                placeholder="94621"
+                className="w-full rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs focus:border-[#2CA01C] focus:outline-none"
+              />
+            </div>
+          </div>
         </div>
 
         <div className="flex justify-end gap-3 pt-3 border-t border-slate-200">
@@ -2626,7 +2887,7 @@ function CreateVendorModal({
           </button>
           <button
             type="submit"
-            disabled={isSubmitting || !name.trim()}
+            disabled={isSubmitting || !effectiveDisplayName}
             className="rounded-full bg-[#2CA01C] px-6 py-2 text-sm font-semibold text-white hover:bg-[#248217] disabled:opacity-50"
           >
             {isSubmitting ? "Saving..." : "Save Vendor"}

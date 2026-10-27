@@ -14,6 +14,10 @@
 
 ### B. Advanced Reporting & Accounting Enhancements
 - [x] **Date-Range & Cash vs. Accrual Basis Filtering:** Filter Profit & Loss, Balance Sheet, Trial Balance, A/R & A/P Aging, and General Ledger reports by custom start/end dates and toggle between Accrual Basis and Cash Basis with exact integer-cent balance invariants.
+- [x] **Period Comparison Mode (Previous Period & Previous Year):** Compare Profit & Loss, Balance Sheet, and Trial Balance side-by-side with prior period/year columns, exact dollar changes, and percent variance.
+- [x] **Reports Center Filter Toolbar:** Date presets, custom date pickers, Basis selector, Entity/Payee filter, GL Account filter, and Zero-balance row toggle.
+- [x] **Top Global Search Bar (`Ctrl+K` / `/`):** Fast multi-entity search across transactions, customers, vendors, invoices, bills, chart of accounts, and dollar amounts.
+- [x] **Customer & Vendor Profile Enhancements:** First & Last name, Company, Tax ID (SSN/EIN/1099), structured Address, and optional default expense category.
 - [x] **Sales Tax Calculation on Invoices:** Automatically calculate and post a separate `Sales Tax Payable (2200)` credit line on taxable invoice line items using `salesTaxRatePercent`.
 - [x] **Bank Feed Deposit & Outflow Matching to Open Invoices & Bills:** Match imported bank CSV rows directly against open Customer Invoices (`A/R 1100`) or open Vendor Bills (`A/P 2000`) in one click without double-counting revenue or expenses.
 - [x] **Create New Customer & New Vendor UI Modals:** Create new Customer and Vendor profiles directly from `+ New` Quick Create and the Sales/Expenses tabs.
