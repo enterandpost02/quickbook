@@ -50,4 +50,5 @@
 ## Database Integration — PostgreSQL + Drizzle ORM Persistence
 - Extended [`src/db/schema.ts`](../src/db/schema.ts) with multi-tenant PostgreSQL ledger tables (`accounts`, `journal_entries`, `journal_lines`, `bank_transactions`, `organization_ledger_state`) scoped by `organization_id`.
 - Generated SQL migration [`drizzle/0001_serious_misty_knight.sql`](../drizzle/0001_serious_misty_knight.sql).
-- Created [`src/lib/qbo-db.ts`](../src/lib/qbo-db.ts) and wired `/dashboard` and `/api/qbo` to automatically load from and persist to PostgreSQL (supports cloud **Supabase / Neon** via `DATABASE_URL` in `.env.local`, with automatic embedded **PGlite** PostgreSQL fallback in `.local-db` when `DATABASE_URL` is not set).
+- Created [`src/lib/qbo-db.ts`](../src/lib/qbo-db.ts) and wired `/dashboard` and `/api/qbo` to automatically load from and persist to PostgreSQL.
+- Connected live **Supabase PostgreSQL (`ap-southeast-2` pooler)** via `.env.local`, applied all Drizzle migrations via `npm run db:migrate`, and seeded organization `5d1a3c33-c74c-419d-9001-af6d3ac54710` (**Craig's Design and Landscaping Services**, 31 accounts, 9 journal entries, 24 journal lines, 7 bank transactions).
