@@ -39,7 +39,9 @@ export type ActiveModalType =
   | "transfer"
   | "expense"
   | "bill"
-  | "account";
+  | "account"
+  | "customer"
+  | "vendor";
 
 interface ModalsProps {
   activeModal: ActiveModalType;
@@ -134,6 +136,21 @@ export function QboModals({
           isSubmitting={isSubmitting}
         />
       )}
+      {activeModal === "customer" && (
+        <CreateCustomerModal
+          onClose={() => setActiveModal(null)}
+          runAction={runAction}
+          isSubmitting={isSubmitting}
+        />
+      )}
+      {activeModal === "vendor" && (
+        <CreateVendorModal
+          state={state}
+          onClose={() => setActiveModal(null)}
+          runAction={runAction}
+          isSubmitting={isSubmitting}
+        />
+      )}
     </div>
   );
 }
@@ -196,6 +213,13 @@ function QuickCreateMenuModal({
               <Package className="h-4 w-4 text-[#2CA01C]" />
               Product / Service Item
             </button>
+            <button
+              onClick={() => onSelect("customer")}
+              className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-emerald-50 hover:text-[#2CA01C]"
+            >
+              <Plus className="h-4 w-4 text-[#2CA01C]" />
+              New Customer Profile
+            </button>
           </div>
         </div>
 
@@ -218,6 +242,13 @@ function QuickCreateMenuModal({
             >
               <FileSpreadsheet className="h-4 w-4 text-[#2CA01C]" />
               Vendor Bill (A/P)
+            </button>
+            <button
+              onClick={() => onSelect("vendor")}
+              className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-emerald-50 hover:text-[#2CA01C]"
+            >
+              <Plus className="h-4 w-4 text-[#2CA01C]" />
+              New Vendor Profile
             </button>
           </div>
         </div>
@@ -1044,6 +1075,10 @@ function CreateInvoiceModal({
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [dueDate, setDueDate] = useState("2026-11-25");
   const firstCatalog = state.productsAndServices[0];
+  const [applySalesTax, setApplySalesTax] = useState(true);
+  const [taxRateInput, setTaxRateInput] = useState(
+    String(state.salesTaxRatePercent ?? 8.25)
+  );
   const [lines, setLines] = useState([
     {
       serviceName:
@@ -1055,6 +1090,7 @@ function CreateInvoiceModal({
       rateDollars: ((firstCatalog?.rateCents ?? 125000) / 100).toFixed(2),
       incomeAccountId:
         firstCatalog?.incomeAccountId ?? incomeAccounts[0]?.id ?? "acc-4010",
+      taxable: true,
     },
   ]);
 
@@ -1066,10 +1102,24 @@ function CreateInvoiceModal({
     }
   }
 
-  const totalCents = lines.reduce(
+  const subtotalCents = lines.reduce(
     (s, l) => s + Math.round(l.quantity * safeRateCents(l.rateDollars)),
     0
   );
+  const taxableSubtotalCents = lines.reduce(
+    (s, l) =>
+      l.taxable
+        ? s + Math.round(l.quantity * safeRateCents(l.rateDollars))
+        : s,
+    0
+  );
+  const effectiveTaxRate = applySalesTax
+    ? Math.max(0, Number(taxRateInput) || 0)
+    : 0;
+  const taxCents = applySalesTax
+    ? Math.round((taxableSubtotalCents * effectiveTaxRate) / 100)
+    : 0;
+  const totalCents = subtotalCents + taxCents;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -1079,15 +1129,22 @@ function CreateInvoiceModal({
         customerId,
         date,
         dueDate,
+        applySalesTax,
+        taxRatePercent: effectiveTaxRate,
         lines: lines.map((l) => ({
           serviceName: l.serviceName,
           description: l.description,
           quantity: Number(l.quantity) || 1,
           rateCents: safeRateCents(l.rateDollars),
           incomeAccountId: l.incomeAccountId,
+          taxable: l.taxable,
         })),
       },
-      `Created Invoice for ${formatCents(totalCents)} and posted to A/R`
+      `Created Invoice for ${formatCents(totalCents)} (${
+        taxCents > 0
+          ? `Subtotal ${formatCents(subtotalCents)} + Sales Tax ${formatCents(taxCents)}`
+          : "No Sales Tax"
+      }) and posted to A/R`
     );
     onClose();
   }
@@ -1175,6 +1232,7 @@ function CreateInvoiceModal({
                 <th className="px-3 py-2.5">Income Account</th>
                 <th className="px-3 py-2.5 w-20 text-right">Qty</th>
                 <th className="px-3 py-2.5 w-28 text-right">Rate ($)</th>
+                <th className="px-3 py-2.5 w-16 text-center">Tax</th>
                 <th className="px-3 py-2.5 w-28 text-right">Amount</th>
               </tr>
             </thead>
@@ -1266,6 +1324,18 @@ function CreateInvoiceModal({
                         className="w-full rounded border border-slate-300 px-2 py-1.5 text-right font-mono text-xs"
                       />
                     </td>
+                    <td className="px-3 py-2 text-center">
+                      <input
+                        type="checkbox"
+                        checked={line.taxable}
+                        onChange={(e) => {
+                          const next = [...lines];
+                          next[i].taxable = e.target.checked;
+                          setLines(next);
+                        }}
+                        className="h-4 w-4 rounded border-slate-300 text-[#2CA01C] focus:ring-[#2CA01C]"
+                      />
+                    </td>
                     <td className="px-3 py-2 text-right font-mono font-semibold text-slate-900">
                       {formatCents(lineAmt)}
                     </td>
@@ -1274,6 +1344,58 @@ function CreateInvoiceModal({
               })}
             </tbody>
           </table>
+        </div>
+
+        {/* Sales Tax & Totals Summary Bar */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border border-slate-200 bg-[#F4F5F8] p-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="inline-flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={applySalesTax}
+                onChange={(e) => setApplySalesTax(e.target.checked)}
+                className="h-4 w-4 rounded border-slate-300 text-[#2CA01C] focus:ring-[#2CA01C]"
+              />
+              Charge Sales Tax (2200 Sales Tax Payable)
+            </label>
+            {applySalesTax && (
+              <div className="inline-flex items-center gap-1.5">
+                <span className="text-xs text-slate-500">Rate (%):</span>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="50"
+                  value={taxRateInput}
+                  onChange={(e) => setTaxRateInput(e.target.value)}
+                  className="w-20 rounded border border-slate-300 bg-white px-2 py-1 text-right font-mono text-xs font-semibold"
+                />
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-1 text-right min-w-[220px]">
+            <div className="flex justify-between text-xs text-slate-600">
+              <span>Subtotal:</span>
+              <span className="font-mono font-semibold text-slate-800">
+                {formatCents(subtotalCents)}
+              </span>
+            </div>
+            <div className="flex justify-between text-xs text-slate-600">
+              <span>
+                Sales Tax ({applySalesTax ? `${effectiveTaxRate}%` : "0%"}):
+              </span>
+              <span className="font-mono font-semibold text-slate-800">
+                {formatCents(taxCents)}
+              </span>
+            </div>
+            <div className="flex justify-between text-sm font-bold text-slate-900 border-t border-slate-300 pt-1">
+              <span>Invoice Total (Debit A/R):</span>
+              <span className="font-mono text-[#2CA01C]">
+                {formatCents(totalCents)}
+              </span>
+            </div>
+          </div>
         </div>
 
         <div className="flex items-center justify-between pt-2">
@@ -1292,6 +1414,7 @@ function CreateInvoiceModal({
                   quantity: 1,
                   rateDollars: "350.00",
                   incomeAccountId: incomeAccounts[0]?.id ?? "acc-4010",
+                  taxable: true,
                 },
               ])
             }
@@ -2227,6 +2350,286 @@ function CreateAccountModal({
             className="rounded-full bg-[#2CA01C] px-6 py-2 text-sm font-semibold text-white hover:bg-[#248217]"
           >
             Save and Close
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+// ============================================================================
+// 10. Create New Customer Profile Modal
+// ============================================================================
+
+function CreateCustomerModal({
+  onClose,
+  runAction,
+  isSubmitting,
+}: {
+  onClose: () => void;
+  runAction: (
+    action: string,
+    payload?: unknown,
+    successMsg?: string
+  ) => Promise<void>;
+  isSubmitting: boolean;
+}) {
+  const [name, setName] = useState("");
+  const [company, setCompany] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name.trim()) return;
+    await runAction(
+      "create_customer",
+      {
+        name: name.trim(),
+        company: company.trim() || name.trim(),
+        email: email.trim(),
+        phone: phone.trim(),
+      },
+      `Added customer "${name.trim()}" to Customer Directory`
+    );
+    onClose();
+  }
+
+  return (
+    <div className="w-full max-w-lg rounded-xl bg-white shadow-2xl border border-slate-200 overflow-hidden">
+      <div className="flex items-center justify-between px-6 py-4 bg-[#1E252B] text-white">
+        <div className="flex items-center gap-2">
+          <Plus className="h-5 w-5 text-[#2CA01C]" />
+          <div>
+            <h2 className="text-base font-bold">New Customer Profile</h2>
+            <p className="text-xs text-slate-300">
+              Create a customer for Invoices, Estimates &amp; A/R Tracking
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={onClose}
+          className="rounded-lg p-1.5 text-slate-300 hover:bg-slate-700"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
+              Customer Display Name *
+            </label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Redwood Tech Campus"
+              required
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
+              Company Name
+            </label>
+            <input
+              type="text"
+              value={company}
+              onChange={(e) => setCompany(e.target.value)}
+              placeholder="e.g. Redwood Properties LLC"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
+              Email Address
+            </label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="ap@redwoodcampus.com"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
+              Phone Number
+            </label>
+            <input
+              type="text"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="(650) 555-0192"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            />
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-3 pt-3 border-t border-slate-200">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full border border-slate-300 px-5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={isSubmitting || !name.trim()}
+            className="rounded-full bg-[#2CA01C] px-6 py-2 text-sm font-semibold text-white hover:bg-[#248217] disabled:opacity-50"
+          >
+            {isSubmitting ? "Saving..." : "Save Customer"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+// ============================================================================
+// 11. Create New Vendor Profile Modal
+// ============================================================================
+
+function CreateVendorModal({
+  state,
+  onClose,
+  runAction,
+  isSubmitting,
+}: {
+  state: ComputedQboState;
+  onClose: () => void;
+  runAction: (
+    action: string,
+    payload?: unknown,
+    successMsg?: string
+  ) => Promise<void>;
+  isSubmitting: boolean;
+}) {
+  const expenseAccounts = state.accounts.filter(
+    (a) => a.type === "Expenses" || a.type === "Cost of Goods Sold"
+  );
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [defaultExpenseAccountId, setDefaultExpenseAccountId] = useState(
+    expenseAccounts[0]?.id ?? "acc-5010"
+  );
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name.trim()) return;
+    await runAction(
+      "create_vendor",
+      {
+        name: name.trim(),
+        email: email.trim(),
+        phone: phone.trim(),
+        defaultExpenseAccountId,
+      },
+      `Added vendor "${name.trim()}" to Vendor Directory`
+    );
+    onClose();
+  }
+
+  return (
+    <div className="w-full max-w-lg rounded-xl bg-white shadow-2xl border border-slate-200 overflow-hidden">
+      <div className="flex items-center justify-between px-6 py-4 bg-[#1E252B] text-white">
+        <div className="flex items-center gap-2">
+          <Plus className="h-5 w-5 text-[#2CA01C]" />
+          <div>
+            <h2 className="text-base font-bold">New Vendor Profile</h2>
+            <p className="text-xs text-slate-300">
+              Create a supplier/vendor for Bills (A/P) &amp; Expense categorization
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={onClose}
+          className="rounded-lg p-1.5 text-slate-300 hover:bg-slate-700"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <div>
+          <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
+            Vendor / Supplier Name *
+          </label>
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. Pacific Stone & Paver Supply"
+            required
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          />
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
+              Email Address
+            </label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="billing@pacificstone.com"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
+              Phone Number
+            </label>
+            <input
+              type="text"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="(650) 555-0177"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold uppercase text-slate-600 mb-1">
+            Default Expense / COGS Account
+          </label>
+          <select
+            value={defaultExpenseAccountId}
+            onChange={(e) => setDefaultExpenseAccountId(e.target.value)}
+            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+          >
+            {expenseAccounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.code} — {a.name} ({a.type})
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex justify-end gap-3 pt-3 border-t border-slate-200">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full border border-slate-300 px-5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={isSubmitting || !name.trim()}
+            className="rounded-full bg-[#2CA01C] px-6 py-2 text-sm font-semibold text-white hover:bg-[#248217] disabled:opacity-50"
+          >
+            {isSubmitting ? "Saving..." : "Save Vendor"}
           </button>
         </div>
       </form>

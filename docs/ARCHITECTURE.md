@@ -99,11 +99,12 @@ Every business workflow in the UI translates into a balanced double-entry `QboJo
 
 | User Action | Source Type | Debit Account (`debitCents`) | Credit Account (`creditCents`) |
 | :--- | :--- | :--- | :--- |
-| **Create Customer Invoice** | `invoice` | `1100 Accounts Receivable (A/R)` | `4000+ Income Account(s)` |
+| **Create Customer Invoice** | `invoice` | `1100 Accounts Receivable (A/R)` (`Subtotal + Tax`) | `4000+ Income Account(s)` (`Subtotal`) + `2200 Sales Tax Payable` (`Tax`) |
 | **Receive Invoice Payment** | `invoice_payment` | `1000 Checking` or `1050 Undeposited Funds` | `1100 Accounts Receivable (A/R)` |
+| **Match Bank Deposit to Invoice** | `invoice_payment` | `1000/1010 Bank Account` | `1100 Accounts Receivable (A/R)` (plus `4000` if overpayment) |
 | **Record Cash/Card Expense** | `expense` | `5000/6000+ Expense / COGS Account` | `1000 Checking` or `2100 Credit Card` |
 | **Enter Vendor Bill** | `bill` | `5000/6000+ Expense / COGS Account` | `2000 Accounts Payable (A/P)` |
-| **Pay Vendor Bill** | `bill_payment` | `2000 Accounts Payable (A/P)` | `1000 Checking` |
+| **Pay Vendor Bill / Match Outflow** | `bill_payment` | `2000 Accounts Payable (A/P)` | `1000/1010 Bank` or `2100 Credit Card` |
 | **Categorize Bank Deposit (CSV)** | `bank_feed` | `1000/1010 Bank Account` | Selected Income / Equity / A/R Account |
 | **Categorize Bank Spend (CSV)** | `bank_feed` | Selected Expense / COGS / Liability Account | `1000/1010 Bank` or `2100 Credit Card` |
 | **Bank-to-Bank Transfer** | `transfer` | Destination Bank Account (`toAccountId`) | Source Bank Account (`fromAccountId`) |

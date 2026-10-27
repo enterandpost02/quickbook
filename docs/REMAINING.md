@@ -13,9 +13,11 @@
 - [x] Connect live **Supabase PostgreSQL** `DATABASE_URL` in `.env.local` and run `npm run db:migrate` to create and seed all tables in the cloud database.
 
 ### B. Advanced Reporting & Accounting Enhancements
-- [ ] **Date-Range & Cash vs. Accrual Basis Filtering:** Filter Profit & Loss, Balance Sheet, and General Ledger reports by custom start/end dates and toggle between Accrual Basis and Cash Basis.
-- [ ] **Sales Tax Calculation on Invoices:** Automatically calculate and post a separate `Sales Tax Payable (2200)` credit line on taxable invoice line items using `salesTaxRatePercent`.
-- [ ] **Bank Feed Deposit Matching to Open Invoices:** Allow matching an imported positive bank CSV row directly against an open Invoice (`A/R 1100`) or `Undeposited Funds (1050)` in one click.
+- [x] **Date-Range & Cash vs. Accrual Basis Filtering:** Filter Profit & Loss, Balance Sheet, Trial Balance, A/R & A/P Aging, and General Ledger reports by custom start/end dates and toggle between Accrual Basis and Cash Basis with exact integer-cent balance invariants.
+- [x] **Sales Tax Calculation on Invoices:** Automatically calculate and post a separate `Sales Tax Payable (2200)` credit line on taxable invoice line items using `salesTaxRatePercent`.
+- [x] **Bank Feed Deposit & Outflow Matching to Open Invoices & Bills:** Match imported bank CSV rows directly against open Customer Invoices (`A/R 1100`) or open Vendor Bills (`A/P 2000`) in one click without double-counting revenue or expenses.
+- [x] **Create New Customer & New Vendor UI Modals:** Create new Customer and Vendor profiles directly from `+ New` Quick Create and the Sales/Expenses tabs.
+- [x] **User Profile & Session Header Menu:** Top-right user session menu linking active company role switching with `/login` and `/signup`.
 - [ ] **Receipt File Upload & Attachment Preview:** Attach PDF/image receipts to Expenses and Vendor Bills.
 - [ ] **Recurring Invoices & Scheduled Reminders:** Configure recurring monthly/weekly invoice templates.
 

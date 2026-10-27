@@ -23,7 +23,10 @@ import {
   Unlock,
   Upload,
 } from "lucide-react";
-import type { ComputedQboState } from "@/lib/qbo-store";
+import {
+  computeReportsForFilter,
+  type ComputedQboState,
+} from "@/lib/qbo-store";
 import { formatCents, parseDollarsToCents } from "@/lib/money";
 import type { ActiveModalType } from "./qbo-modals";
 
@@ -562,6 +565,19 @@ export function BankingCenterView({
     Record<string, string>
   >({});
   const [payeeByTx, setPayeeByTx] = useState<Record<string, string>>({});
+  const [actionModeByTx, setActionModeByTx] = useState<
+    Record<string, "categorize" | "match">
+  >({});
+  const [matchTargetByTx, setMatchTargetByTx] = useState<
+    Record<string, string>
+  >({});
+
+  const openInvoices = state.invoices.filter(
+    (inv) => inv.status !== "Paid" && inv.balanceDueCents > 0
+  );
+  const openBills = state.expenses.filter(
+    (exp) => exp.type === "Bill" && exp.status !== "Paid" && exp.amountCents > 0
+  );
 
   const [ruleName, setRuleName] = useState("");
   const [ruleContains, setRuleContains] = useState("");
@@ -891,6 +907,33 @@ export function BankingCenterView({
                       nonBankAccounts[0]?.id ??
                       "acc-5010";
                     const chosenPayee = payeeByTx[tx.id] ?? tx.payee ?? "";
+                    const isDeposit = tx.amountCents >= 0;
+                    const exactInvoiceMatch = isDeposit
+                      ? openInvoices.find(
+                          (inv) => inv.balanceDueCents === tx.amountCents
+                        )
+                      : undefined;
+                    const exactBillMatch = !isDeposit
+                      ? openBills.find(
+                          (b) => b.amountCents === Math.abs(tx.amountCents)
+                        )
+                      : undefined;
+
+                    const canMatch = isDeposit
+                      ? openInvoices.length > 0
+                      : openBills.length > 0;
+                    const defaultMode: "categorize" | "match" =
+                      (exactInvoiceMatch || exactBillMatch) && canMatch
+                        ? "match"
+                        : "categorize";
+                    const currentMode =
+                      actionModeByTx[tx.id] ?? defaultMode;
+
+                    const chosenMatchId =
+                      matchTargetByTx[tx.id] ??
+                      (isDeposit
+                        ? exactInvoiceMatch?.id ?? openInvoices[0]?.id ?? ""
+                        : exactBillMatch?.id ?? openBills[0]?.id ?? "");
 
                     return (
                       <tr key={tx.id} className="hover:bg-slate-50/90">
@@ -907,6 +950,16 @@ export function BankingCenterView({
                                 RULE: {tx.matchedRuleName}
                               </span>
                             )}
+                            {(exactInvoiceMatch || exactBillMatch) &&
+                              subTab === "for_review" && (
+                                <span className="inline-flex items-center gap-1 rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-bold text-[#0077C5]">
+                                  EXACT{" "}
+                                  {exactInvoiceMatch
+                                    ? `INVOICE #${exactInvoiceMatch.invoiceNumber}`
+                                    : `BILL ${exactBillMatch?.refNumber}`}{" "}
+                                  MATCH
+                                </span>
+                              )}
                             {tx.aiConfidence !== undefined && (
                               <span className="inline-flex items-center gap-1 rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-bold text-indigo-800">
                                 AI {tx.aiConfidence}% Confidence
@@ -944,29 +997,98 @@ export function BankingCenterView({
                         </td>
                         <td className="px-4 py-3">
                           {subTab === "for_review" ? (
-                            <select
-                              value={chosenCatId}
-                              onChange={(e) =>
-                                setSelectedCategoryByTx({
-                                  ...selectedCategoryByTx,
-                                  [tx.id]: e.target.value,
-                                })
-                              }
-                              className="w-60 rounded border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-800"
-                            >
-                              {nonBankAccounts.map((acc) => (
-                                <option key={acc.id} value={acc.id}>
-                                  {acc.code} — {acc.name} ({acc.type})
-                                </option>
-                              ))}
-                            </select>
+                            <div className="space-y-1.5">
+                              {canMatch && (
+                                <div className="inline-flex rounded border border-slate-200 bg-slate-100 p-0.5 text-[10px] font-bold">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setActionModeByTx({
+                                        ...actionModeByTx,
+                                        [tx.id]: "categorize",
+                                      })
+                                    }
+                                    className={`rounded px-2 py-0.5 ${
+                                      currentMode === "categorize"
+                                        ? "bg-white text-slate-900 shadow-2xs"
+                                        : "text-slate-500 hover:text-slate-800"
+                                    }`}
+                                  >
+                                    Categorize
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setActionModeByTx({
+                                        ...actionModeByTx,
+                                        [tx.id]: "match",
+                                      })
+                                    }
+                                    className={`rounded px-2 py-0.5 ${
+                                      currentMode === "match"
+                                        ? "bg-[#0077C5] text-white shadow-2xs"
+                                        : "text-slate-500 hover:text-slate-800"
+                                    }`}
+                                  >
+                                    Match {isDeposit ? "Invoice" : "Bill"}
+                                  </button>
+                                </div>
+                              )}
+
+                              {currentMode === "match" && canMatch ? (
+                                <select
+                                  value={chosenMatchId}
+                                  onChange={(e) =>
+                                    setMatchTargetByTx({
+                                      ...matchTargetByTx,
+                                      [tx.id]: e.target.value,
+                                    })
+                                  }
+                                  className="w-60 rounded border border-[#0077C5] bg-sky-50/40 px-2 py-1 text-xs font-semibold text-slate-900"
+                                >
+                                  {isDeposit
+                                    ? openInvoices.map((inv) => (
+                                        <option key={inv.id} value={inv.id}>
+                                          Inv #{inv.invoiceNumber} ·{" "}
+                                          {inv.customerName} (Open:{" "}
+                                          {formatCents(inv.balanceDueCents)})
+                                        </option>
+                                      ))
+                                    : openBills.map((b) => (
+                                        <option key={b.id} value={b.id}>
+                                          Bill {b.refNumber} · {b.vendorName} (
+                                          {formatCents(b.amountCents)})
+                                        </option>
+                                      ))}
+                                </select>
+                              ) : (
+                                <select
+                                  value={chosenCatId}
+                                  onChange={(e) =>
+                                    setSelectedCategoryByTx({
+                                      ...selectedCategoryByTx,
+                                      [tx.id]: e.target.value,
+                                    })
+                                  }
+                                  className="w-60 rounded border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-800"
+                                >
+                                  {nonBankAccounts.map((acc) => (
+                                    <option key={acc.id} value={acc.id}>
+                                      {acc.code} — {acc.name} ({acc.type})
+                                    </option>
+                                  ))}
+                                </select>
+                              )}
+                            </div>
                           ) : (
                             <span className="font-medium text-slate-700">
-                              {
-                                state.accounts.find(
-                                  (a) => a.id === tx.suggestedAccountId
-                                )?.name
-                              }
+                              {tx.matchedInvoiceId
+                                ? `Matched to Invoice`
+                                : tx.matchedBillId
+                                ? `Matched to Bill`
+                                : state.accounts.find(
+                                    (a) => a.id === tx.suggestedAccountId
+                                  )?.name}
                             </span>
                           )}
                         </td>
@@ -983,23 +1105,49 @@ export function BankingCenterView({
                         <td className="px-4 py-3 text-right whitespace-nowrap">
                           {subTab === "for_review" ? (
                             <div className="inline-flex items-center gap-2">
-                              <button
-                                onClick={() =>
-                                  runAction(
-                                    "categorize_bank_tx",
-                                    {
-                                      transactionId: tx.id,
-                                      categoryAccountId: chosenCatId,
-                                      payee: chosenPayee,
-                                    },
-                                    `Posted ${tx.description} to General Ledger`
-                                  )
-                                }
-                                disabled={isSubmitting}
-                                className="rounded-full bg-[#2CA01C] px-3.5 py-1 text-xs font-bold text-white hover:bg-[#248217]"
-                              >
-                                Add
-                              </button>
+                              {currentMode === "match" &&
+                              canMatch &&
+                              chosenMatchId ? (
+                                <button
+                                  onClick={() =>
+                                    runAction(
+                                      "match_bank_tx",
+                                      {
+                                        transactionId: tx.id,
+                                        matchType: isDeposit
+                                          ? "invoice"
+                                          : "bill",
+                                        targetId: chosenMatchId,
+                                      },
+                                      `Matched ${tx.description} to ${
+                                        isDeposit ? "Open Invoice" : "Open Bill"
+                                      } without double-counting!`
+                                    )
+                                  }
+                                  disabled={isSubmitting}
+                                  className="rounded-full bg-[#0077C5] px-3.5 py-1 text-xs font-bold text-white hover:bg-[#005fa0]"
+                                >
+                                  Match
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() =>
+                                    runAction(
+                                      "categorize_bank_tx",
+                                      {
+                                        transactionId: tx.id,
+                                        categoryAccountId: chosenCatId,
+                                        payee: chosenPayee,
+                                      },
+                                      `Posted ${tx.description} to General Ledger`
+                                    )
+                                  }
+                                  disabled={isSubmitting}
+                                  className="rounded-full bg-[#2CA01C] px-3.5 py-1 text-xs font-bold text-white hover:bg-[#248217]"
+                                >
+                                  Add
+                                </button>
+                              )}
                               <button
                                 onClick={() =>
                                   runAction(
@@ -1015,7 +1163,10 @@ export function BankingCenterView({
                             </div>
                           ) : (
                             <span className="inline-flex items-center gap-1 text-emerald-700 font-semibold">
-                              <Check className="h-3.5 w-3.5" /> Added
+                              <Check className="h-3.5 w-3.5" />{" "}
+                              {tx.matchedInvoiceId || tx.matchedBillId
+                                ? "Matched"
+                                : "Added"}
                             </span>
                           )}
                         </td>
@@ -1056,7 +1207,14 @@ export function SalesAndInvoicesView({
             Create estimates, convert quotes to invoices, receive payments, and manage Products &amp; Services
           </p>
         </div>
-        <div className="flex items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            onClick={() => setActiveModal("customer")}
+            className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            <Plus className="h-3.5 w-3.5 text-[#2CA01C]" />
+            + New Customer
+          </button>
           <button
             onClick={() => setActiveModal("product_service")}
             className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
@@ -1204,7 +1362,12 @@ export function SalesAndInvoicesView({
                     {inv.dueDate}
                   </td>
                   <td className="px-4 py-3 text-right font-mono font-semibold">
-                    {formatCents(inv.totalCents)}
+                    <div>{formatCents(inv.totalCents)}</div>
+                    {(inv.taxCents ?? 0) > 0 && (
+                      <span className="block text-[10px] font-normal text-slate-400">
+                        incl. {formatCents(inv.taxCents ?? 0)} tax
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-right font-mono font-bold text-slate-900">
                     {formatCents(inv.balanceDueCents)}
@@ -1415,7 +1578,13 @@ export function ExpensesAndVendorsView({
             Record cash/card expenses, track vendor bills in Accounts Payable, and pay bills
           </p>
         </div>
-        <div className="flex items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            onClick={() => setActiveModal("vendor")}
+            className="rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            + New Vendor
+          </button>
           <button
             onClick={() => setActiveModal("bill")}
             className="rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
@@ -1830,6 +1999,32 @@ export function ReportsCenterView({ state }: ViewProps) {
     "pnl" | "bs" | "tb" | "ar_aging" | "ap_aging" | "gl"
   >("pnl");
   const [basis, setBasis] = useState<"Accrual" | "Cash">("Accrual");
+  const [datePreset, setDatePreset] = useState<
+    "all" | "oct_2026" | "sep_2026" | "custom"
+  >("all");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+
+  function applyPreset(preset: "all" | "oct_2026" | "sep_2026" | "custom") {
+    setDatePreset(preset);
+    if (preset === "all") {
+      setStartDate("");
+      setEndDate("");
+    } else if (preset === "oct_2026") {
+      setStartDate("2026-10-01");
+      setEndDate("2026-10-31");
+    } else if (preset === "sep_2026") {
+      setStartDate("2026-09-01");
+      setEndDate("2026-09-30");
+    }
+  }
+
+  const computedReports = computeReportsForFilter(state, {
+    basis: basis === "Cash" ? "cash" : "accrual",
+    startDate: startDate || undefined,
+    endDate: endDate || undefined,
+  });
+
   const {
     profitAndLoss,
     balanceSheet,
@@ -1837,7 +2032,7 @@ export function ReportsCenterView({ state }: ViewProps) {
     arAging,
     apAging,
     generalLedger,
-  } = state.reports;
+  } = computedReports;
 
   function exportReportCsv() {
     let csv = "Section,Code/Entity,Name,Amount\n";
@@ -1907,7 +2102,47 @@ export function ReportsCenterView({ state }: ViewProps) {
           ))}
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Date Range Filter Controls */}
+          <div className="flex flex-wrap items-center gap-1.5 rounded-lg bg-white border border-slate-200 px-2.5 py-1 text-xs">
+            <span className="text-slate-400 font-semibold">Period:</span>
+            <select
+              value={datePreset}
+              onChange={(e) =>
+                applyPreset(
+                  e.target.value as "all" | "oct_2026" | "sep_2026" | "custom"
+                )
+              }
+              className="rounded border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-800"
+            >
+              <option value="all">All Dates</option>
+              <option value="oct_2026">October 2026</option>
+              <option value="sep_2026">September 2026</option>
+              <option value="custom">Custom Range</option>
+            </select>
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => {
+                setDatePreset("custom");
+                setStartDate(e.target.value);
+              }}
+              className="rounded border border-slate-200 px-2 py-0.5 text-xs font-mono text-slate-700"
+              title="Start Date"
+            />
+            <span className="text-slate-400">to</span>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => {
+                setDatePreset("custom");
+                setEndDate(e.target.value);
+              }}
+              className="rounded border border-slate-200 px-2 py-0.5 text-xs font-mono text-slate-700"
+              title="End Date"
+            />
+          </div>
+
           <div className="flex items-center gap-1 rounded-lg bg-white border border-slate-200 p-1 text-xs">
             <span className="px-2 text-slate-400">Basis:</span>
             <button
@@ -1960,7 +2195,11 @@ export function ReportsCenterView({ state }: ViewProps) {
               : "General Ledger"}
           </p>
           <p className="text-xs text-slate-400 mt-0.5">
-            {basis} Basis · All amounts in integer-cents USD
+            {basis} Basis ·{" "}
+            {startDate || endDate
+              ? `${startDate || "Inception"} through ${endDate || "Present"}`
+              : "All Dates"}{" "}
+            · All amounts in integer-cents USD
           </p>
         </div>
 

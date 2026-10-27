@@ -81,6 +81,8 @@ export interface QboBankTransaction {
   status: "for_review" | "categorized" | "excluded";
   suggestedAccountId?: string;
   matchedRuleName?: string;
+  matchedInvoiceId?: string;
+  matchedBillId?: string;
   aiReasoning?: string;
   aiConfidence?: number;
   postedJournalEntryId?: string;
@@ -152,6 +154,7 @@ export interface QboInvoiceLine {
   rateCents: number;
   amountCents: number;
   incomeAccountId: string;
+  taxable?: boolean;
 }
 
 export interface QboInvoice {
@@ -162,6 +165,9 @@ export interface QboInvoice {
   date: string;
   dueDate: string;
   status: "Open" | "Overdue" | "Paid";
+  subtotalCents?: number;
+  taxRatePercent?: number;
+  taxCents?: number;
   totalCents: number;
   balanceDueCents: number;
   lines: QboInvoiceLine[];
@@ -1710,10 +1716,530 @@ export interface ComputedQboState extends QboStoreData {
   };
 }
 
+export interface ReportFilterOptions {
+  basis?: "accrual" | "cash";
+  startDate?: string;
+  endDate?: string;
+}
+
 function diffDays(dueDateStr: string, refDateStr = "2026-10-27"): number {
   const due = new Date(`${dueDateStr}T00:00:00Z`).getTime();
   const ref = new Date(`${refDateStr}T00:00:00Z`).getTime();
   return Math.floor((ref - due) / (1000 * 60 * 60 * 24));
+}
+
+function getEffectiveEntriesForBasis(
+  store: QboStoreData,
+  basis: "accrual" | "cash"
+): QboJournalEntry[] {
+  if (basis === "accrual") {
+    return store.journalEntries;
+  }
+
+  // Cash Basis Transformation:
+  // 1. Exclude unpaid accrual entries (sourceType === 'invoice' or 'bill')
+  // 2. Map 'invoice_payment' Credit A/R lines directly to the invoice's Income/Tax credit lines
+  // 3. Map 'bill_payment' Debit A/P lines directly to the bill's Expense/COGS debit lines
+  const cashEntries: QboJournalEntry[] = [];
+
+  for (const entry of store.journalEntries) {
+    if (entry.sourceType === "invoice" || entry.sourceType === "bill") {
+      continue;
+    }
+
+    if (entry.sourceType === "reversal" && entry.reversesEntryId) {
+      const reversedOrig = store.journalEntries.find(
+        (e) => e.id === entry.reversesEntryId
+      );
+      if (
+        reversedOrig &&
+        (reversedOrig.sourceType === "invoice" ||
+          reversedOrig.sourceType === "bill")
+      ) {
+        continue;
+      }
+    }
+
+    if (entry.sourceType === "invoice_payment") {
+      const inv = store.invoices.find(
+        (i) => i.id === entry.sourceId || i.paymentJournalEntryId === entry.id
+      );
+      const origJe = store.journalEntries.find(
+        (e) =>
+          e.sourceType === "invoice" &&
+          (e.id === inv?.journalEntryId ||
+            (entry.sourceId && e.sourceId === entry.sourceId))
+      );
+      const origCreditLines =
+        origJe?.lines.filter((l) => l.creditCents > 0) ?? [];
+      const origTotalCredit = origCreditLines.reduce(
+        (s, l) => s + l.creditCents,
+        0
+      );
+
+      const transformedLines: QboJournalLine[] = [];
+      for (const line of entry.lines) {
+        if (
+          line.accountId === "acc-1100" &&
+          line.creditCents > 0 &&
+          origCreditLines.length > 0 &&
+          origTotalCredit > 0
+        ) {
+          let remaining = line.creditCents;
+          const allocated = origCreditLines.map((cl, idx) => {
+            const share =
+              idx === origCreditLines.length - 1
+                ? remaining
+                : Math.round(
+                    (line.creditCents * cl.creditCents) / origTotalCredit
+                  );
+            remaining -= share;
+            return {
+              ...cl,
+              id: `${line.id}-cash-${idx}`,
+              debitCents: 0,
+              creditCents: share,
+            };
+          });
+          transformedLines.push(...allocated);
+        } else if (line.accountId === "acc-1100" && line.creditCents > 0) {
+          const fallbackAcc =
+            store.accounts.find((a) => a.id === "acc-4000") ??
+            store.accounts[0];
+          transformedLines.push({
+            ...line,
+            accountId: fallbackAcc.id,
+            accountCode: fallbackAcc.code,
+            accountName: fallbackAcc.name,
+          });
+        } else {
+          transformedLines.push(line);
+        }
+      }
+
+      cashEntries.push({
+        ...entry,
+        lines: transformedLines,
+      });
+      continue;
+    }
+
+    if (entry.sourceType === "bill_payment") {
+      const bill = store.expenses.find(
+        (b) => b.id === entry.sourceId || b.paymentJournalEntryId === entry.id
+      );
+      const origJe = store.journalEntries.find(
+        (e) =>
+          e.sourceType === "bill" &&
+          (e.id === bill?.journalEntryId ||
+            (entry.sourceId && e.sourceId === entry.sourceId))
+      );
+      const origDebitLines =
+        origJe?.lines.filter((l) => l.debitCents > 0) ?? [];
+      const origTotalDebit = origDebitLines.reduce(
+        (s, l) => s + l.debitCents,
+        0
+      );
+
+      const transformedLines: QboJournalLine[] = [];
+      for (const line of entry.lines) {
+        if (
+          line.accountId === "acc-2000" &&
+          line.debitCents > 0 &&
+          origDebitLines.length > 0 &&
+          origTotalDebit > 0
+        ) {
+          let remaining = line.debitCents;
+          const allocated = origDebitLines.map((dl, idx) => {
+            const share =
+              idx === origDebitLines.length - 1
+                ? remaining
+                : Math.round(
+                    (line.debitCents * dl.debitCents) / origTotalDebit
+                  );
+            remaining -= share;
+            return {
+              ...dl,
+              id: `${line.id}-cash-${idx}`,
+              debitCents: share,
+              creditCents: 0,
+            };
+          });
+          transformedLines.push(...allocated);
+        } else if (
+          line.accountId === "acc-2000" &&
+          line.debitCents > 0 &&
+          bill
+        ) {
+          const catAcc = store.accounts.find(
+            (a) => a.id === bill.categoryAccountId
+          );
+          transformedLines.push({
+            ...line,
+            accountId: catAcc?.id ?? "acc-5010",
+            accountCode: catAcc?.code ?? "5010",
+            accountName: catAcc?.name ?? bill.categoryAccountName,
+          });
+        } else {
+          transformedLines.push(line);
+        }
+      }
+
+      cashEntries.push({
+        ...entry,
+        lines: transformedLines,
+      });
+      continue;
+    }
+
+    cashEntries.push(entry);
+  }
+
+  return cashEntries;
+}
+
+export function computeReportsForFilter(
+  store: QboStoreData,
+  filter?: ReportFilterOptions
+): ComputedQboState["reports"] {
+  const basis = filter?.basis ?? "accrual";
+  const startDate = filter?.startDate?.trim() || "";
+  const endDate = filter?.endDate?.trim() || "";
+
+  const effectiveEntries = getEffectiveEntriesForBasis(store, basis);
+  const sortedAll = [...effectiveEntries].sort((a, b) =>
+    a.date.localeCompare(b.date)
+  );
+
+  // Entries up through endDate (for Balance Sheet & Trial Balance)
+  const asOfEntries = sortedAll.filter((e) => !endDate || e.date <= endDate);
+  // Entries within [startDate, endDate] (for Profit & Loss & General Ledger movements)
+  const periodEntries = asOfEntries.filter(
+    (e) => !startDate || e.date >= startDate
+  );
+  // Entries strictly before startDate (for Prior Period Retained Earnings roll-forward)
+  const priorEntries = startDate
+    ? asOfEntries.filter((e) => e.date < startDate)
+    : [];
+
+  function computeAccountBalancesForEntries(
+    entries: QboJournalEntry[]
+  ): ComputedAccount[] {
+    const dMap = new Map<string, number>();
+    const cMap = new Map<string, number>();
+    for (const acc of store.accounts) {
+      dMap.set(acc.id, 0);
+      cMap.set(acc.id, 0);
+    }
+    for (const entry of entries) {
+      for (const line of entry.lines) {
+        dMap.set(
+          line.accountId,
+          (dMap.get(line.accountId) ?? 0) + line.debitCents
+        );
+        cMap.set(
+          line.accountId,
+          (cMap.get(line.accountId) ?? 0) + line.creditCents
+        );
+      }
+    }
+    return store.accounts.map((acc) => {
+      const debitTotalCents = dMap.get(acc.id) ?? 0;
+      const creditTotalCents = cMap.get(acc.id) ?? 0;
+      const balanceCents =
+        acc.normalBalance === "debit"
+          ? debitTotalCents - creditTotalCents
+          : creditTotalCents - debitTotalCents;
+      return {
+        ...acc,
+        debitTotalCents,
+        creditTotalCents,
+        balanceCents,
+        forReviewCount: 0,
+      };
+    });
+  }
+
+  const periodBalances = computeAccountBalancesForEntries(periodEntries);
+  const asOfBalances = computeAccountBalancesForEntries(asOfEntries);
+  const priorBalances = computeAccountBalancesForEntries(priorEntries);
+
+  // Profit & Loss (for periodEntries: [startDate, endDate])
+  const incomeLines = periodBalances
+    .filter((a) => a.type === "Income" && a.balanceCents !== 0)
+    .map((a) => ({
+      id: a.id,
+      code: a.code,
+      name: a.name,
+      amountCents: a.balanceCents,
+    }));
+  const totalIncomeCents = incomeLines.reduce((s, l) => s + l.amountCents, 0);
+
+  const cogsLines = periodBalances
+    .filter((a) => a.type === "Cost of Goods Sold" && a.balanceCents !== 0)
+    .map((a) => ({
+      id: a.id,
+      code: a.code,
+      name: a.name,
+      amountCents: a.balanceCents,
+    }));
+  const totalCogsCents = cogsLines.reduce((s, l) => s + l.amountCents, 0);
+
+  const grossProfitCents = totalIncomeCents - totalCogsCents;
+
+  const expenseLines = periodBalances
+    .filter((a) => a.type === "Expenses" && a.balanceCents !== 0)
+    .map((a) => ({
+      id: a.id,
+      code: a.code,
+      name: a.name,
+      amountCents: a.balanceCents,
+    }));
+  const totalExpensesCents = expenseLines.reduce(
+    (s, l) => s + l.amountCents,
+    0
+  );
+
+  const netIncomeCents = grossProfitCents - totalExpensesCents;
+
+  // Prior Period Net Income (< startDate) rolls into Retained Earnings on Balance Sheet
+  const priorIncome = priorBalances
+    .filter((a) => a.type === "Income")
+    .reduce((s, a) => s + a.balanceCents, 0);
+  const priorCogs = priorBalances
+    .filter((a) => a.type === "Cost of Goods Sold")
+    .reduce((s, a) => s + a.balanceCents, 0);
+  const priorExpenses = priorBalances
+    .filter((a) => a.type === "Expenses")
+    .reduce((s, a) => s + a.balanceCents, 0);
+  const priorNetIncomeCents = priorIncome - priorCogs - priorExpenses;
+
+  // Balance Sheet (As of endDate)
+  const assetTypes: AccountType[] = [
+    "Bank",
+    "Accounts Receivable",
+    "Other Current Assets",
+    "Fixed Assets",
+  ];
+  const liabilityTypes: AccountType[] = [
+    "Accounts Payable",
+    "Credit Card",
+    "Other Current Liabilities",
+    "Long Term Liabilities",
+  ];
+
+  const assetLines = asOfBalances
+    .filter((a) => assetTypes.includes(a.type) && a.balanceCents !== 0)
+    .map((a) => ({
+      id: a.id,
+      code: a.code,
+      name: a.name,
+      type: a.type,
+      amountCents: a.balanceCents,
+    }));
+  const totalAssetsCents = assetLines.reduce((s, l) => s + l.amountCents, 0);
+
+  const liabilityLines = asOfBalances
+    .filter((a) => liabilityTypes.includes(a.type) && a.balanceCents !== 0)
+    .map((a) => ({
+      id: a.id,
+      code: a.code,
+      name: a.name,
+      type: a.type,
+      amountCents: a.balanceCents,
+    }));
+  const totalLiabilitiesCents = liabilityLines.reduce(
+    (s, l) => s + l.amountCents,
+    0
+  );
+
+  const equityLines = asOfBalances
+    .filter((a) => a.type === "Equity" && a.balanceCents !== 0)
+    .map((a) => ({
+      id: a.id,
+      code: a.code,
+      name: a.name,
+      amountCents: a.balanceCents,
+    }));
+  if (priorNetIncomeCents !== 0) {
+    equityLines.push({
+      id: "acc-3200-prior",
+      code: "3200",
+      name: `Retained Earnings (Prior to ${startDate})`,
+      amountCents: priorNetIncomeCents,
+    });
+  }
+  const baseEquityCents = equityLines.reduce((s, l) => s + l.amountCents, 0);
+  const totalEquityCents = baseEquityCents + netIncomeCents;
+  const totalLiabilitiesAndEquityCents =
+    totalLiabilitiesCents + totalEquityCents;
+
+  // Trial Balance (As of endDate)
+  const tbRows = asOfBalances
+    .filter((a) => a.debitTotalCents !== a.creditTotalCents)
+    .map((a) => {
+      const netDebit = a.debitTotalCents - a.creditTotalCents;
+      return {
+        accountId: a.id,
+        code: a.code,
+        name: a.name,
+        type: a.type,
+        debitBalanceCents: netDebit > 0 ? netDebit : 0,
+        creditBalanceCents: netDebit < 0 ? Math.abs(netDebit) : 0,
+      };
+    });
+  const tbTotalDebits = tbRows.reduce((s, r) => s + r.debitBalanceCents, 0);
+  const tbTotalCredits = tbRows.reduce((s, r) => s + r.creditBalanceCents, 0);
+
+  // A/R Aging Summary Calculation (filtered by endDate if provided)
+  const arMap = new Map<string, AgingRow>();
+  if (basis === "accrual") {
+    for (const inv of store.invoices) {
+      if (endDate && inv.date > endDate) continue;
+      if (inv.status === "Paid" || inv.balanceDueCents <= 0) continue;
+      const row = arMap.get(inv.customerId) ?? {
+        entityId: inv.customerId,
+        entityName: inv.customerName,
+        currentCents: 0,
+        days1To30Cents: 0,
+        days31To60Cents: 0,
+        days61PlusCents: 0,
+        totalCents: 0,
+      };
+      const daysPastDue = diffDays(inv.dueDate, endDate || "2026-10-27");
+      if (daysPastDue <= 0) {
+        row.currentCents += inv.balanceDueCents;
+      } else if (daysPastDue <= 30) {
+        row.days1To30Cents += inv.balanceDueCents;
+      } else if (daysPastDue <= 60) {
+        row.days31To60Cents += inv.balanceDueCents;
+      } else {
+        row.days61PlusCents += inv.balanceDueCents;
+      }
+      row.totalCents += inv.balanceDueCents;
+      arMap.set(inv.customerId, row);
+    }
+  }
+  const arRows = Array.from(arMap.values());
+  const arTotalCents = arRows.reduce((s, r) => s + r.totalCents, 0);
+
+  // A/P Aging Summary Calculation (filtered by endDate if provided)
+  const apMap = new Map<string, AgingRow>();
+  if (basis === "accrual") {
+    for (const bill of store.expenses) {
+      if (endDate && bill.date > endDate) continue;
+      if (bill.type !== "Bill" || bill.status === "Paid") continue;
+      const row = apMap.get(bill.vendorId) ?? {
+        entityId: bill.vendorId,
+        entityName: bill.vendorName,
+        currentCents: 0,
+        days1To30Cents: 0,
+        days31To60Cents: 0,
+        days61PlusCents: 0,
+        totalCents: 0,
+      };
+      const daysPastDue = diffDays(
+        bill.dueDate || bill.date,
+        endDate || "2026-10-27"
+      );
+      if (daysPastDue <= 0) {
+        row.currentCents += bill.amountCents;
+      } else if (daysPastDue <= 30) {
+        row.days1To30Cents += bill.amountCents;
+      } else if (daysPastDue <= 60) {
+        row.days31To60Cents += bill.amountCents;
+      } else {
+        row.days61PlusCents += bill.amountCents;
+      }
+      row.totalCents += bill.amountCents;
+      apMap.set(bill.vendorId, row);
+    }
+  }
+  const apRows = Array.from(apMap.values());
+  const apTotalCents = apRows.reduce((s, r) => s + r.totalCents, 0);
+
+  // General Ledger Calculation
+  const generalLedger = asOfBalances
+    .map((acc) => {
+      let runningBalanceCents = 0;
+      const movements: ComputedQboState["reports"]["generalLedger"][number]["movements"] =
+        [];
+
+      for (const entry of asOfEntries) {
+        for (const line of entry.lines) {
+          if (line.accountId === acc.id) {
+            const delta =
+              acc.normalBalance === "debit"
+                ? line.debitCents - line.creditCents
+                : line.creditCents - line.debitCents;
+            runningBalanceCents += delta;
+            if (!startDate || entry.date >= startDate) {
+              movements.push({
+                entryId: entry.id,
+                entryNumber: entry.entryNumber,
+                date: entry.date,
+                memo: entry.memo,
+                description: line.description,
+                entityName: line.entityName,
+                debitCents: line.debitCents,
+                creditCents: line.creditCents,
+                runningBalanceCents,
+              });
+            }
+          }
+        }
+      }
+
+      return {
+        accountId: acc.id,
+        accountCode: acc.code,
+        accountName: acc.name,
+        accountType: acc.type,
+        normalBalance: acc.normalBalance,
+        endingBalanceCents: runningBalanceCents,
+        movements,
+      };
+    })
+    .filter((g) => g.movements.length > 0);
+
+  return {
+    profitAndLoss: {
+      incomeLines,
+      totalIncomeCents,
+      cogsLines,
+      totalCogsCents,
+      grossProfitCents,
+      expenseLines,
+      totalExpensesCents,
+      netIncomeCents,
+    },
+    balanceSheet: {
+      assetLines,
+      totalAssetsCents,
+      liabilityLines,
+      totalLiabilitiesCents,
+      equityLines,
+      netIncomeCents,
+      totalEquityCents,
+      totalLiabilitiesAndEquityCents,
+      isBalanced: totalAssetsCents === totalLiabilitiesAndEquityCents,
+    },
+    trialBalance: {
+      rows: tbRows,
+      totalDebitsCents: tbTotalDebits,
+      totalCreditsCents: tbTotalCredits,
+      isBalanced: tbTotalDebits === tbTotalCredits,
+    },
+    arAging: {
+      rows: arRows,
+      totalCents: arTotalCents,
+    },
+    apAging: {
+      rows: apRows,
+      totalCents: apTotalCents,
+    },
+    generalLedger,
+  };
 }
 
 export function getComputedQboState(): ComputedQboState {
@@ -2399,14 +2925,18 @@ export function createInvoice(input: {
   customerId: string;
   date: string;
   dueDate: string;
+  applySalesTax?: boolean;
+  taxRatePercent?: number;
   lines: Array<{
     serviceName: string;
     description: string;
     quantity: number;
     rateCents: number;
     incomeAccountId: string;
+    taxable?: boolean;
   }>;
 }): QboInvoice {
+  assertCanWrite();
   const store = getRawStore();
   const customer = store.customers.find((c) => c.id === input.customerId);
   if (!customer) throw new Error("Customer not found.");
@@ -2419,19 +2949,60 @@ export function createInvoice(input: {
     rateCents: l.rateCents,
     amountCents: Math.round(l.quantity * l.rateCents),
     incomeAccountId: l.incomeAccountId,
+    taxable: l.taxable !== false,
   }));
 
-  const totalCents = builtLines.reduce((s, l) => s + l.amountCents, 0);
-  if (totalCents <= 0) {
-    throw new Error("Invoice total must be greater than $0.00.");
+  const subtotalCents = builtLines.reduce((s, l) => s + l.amountCents, 0);
+  if (subtotalCents <= 0) {
+    throw new Error("Invoice subtotal must be greater than $0.00.");
   }
 
+  const effectiveTaxRate = input.applySalesTax
+    ? input.taxRatePercent ?? store.salesTaxRatePercent ?? 8.25
+    : 0;
+  const taxableSubtotalCents = input.applySalesTax
+    ? builtLines
+        .filter((l) => l.taxable !== false)
+        .reduce((s, l) => s + l.amountCents, 0)
+    : 0;
+  const taxCents =
+    effectiveTaxRate > 0
+      ? Math.round((taxableSubtotalCents * effectiveTaxRate) / 100)
+      : 0;
+  const totalCents = subtotalCents + taxCents;
+
   const nextInvNum = String(1001 + store.invoices.length);
+  const invId = `inv-${Date.now()}`;
+
+  const creditLines: Array<{
+    accountId: string;
+    description?: string;
+    debitCents: number;
+    creditCents: number;
+    entityName?: string;
+  }> = builtLines.map((l) => ({
+    accountId: l.incomeAccountId,
+    description: `${l.serviceName}: ${l.description}`,
+    debitCents: 0,
+    creditCents: l.amountCents,
+    entityName: customer.name,
+  }));
+
+  if (taxCents > 0) {
+    creditLines.push({
+      accountId: "acc-2200",
+      description: `Sales Tax (${effectiveTaxRate}%) — Invoice #${nextInvNum}`,
+      debitCents: 0,
+      creditCents: taxCents,
+      entityName: customer.name,
+    });
+  }
 
   const je = postJournalEntry({
     date: input.date,
     memo: `Invoice #${nextInvNum} — ${customer.name}`,
     sourceType: "invoice",
+    sourceId: invId,
     lines: [
       {
         accountId: "acc-1100",
@@ -2440,24 +3011,21 @@ export function createInvoice(input: {
         creditCents: 0,
         entityName: customer.name,
       },
-      ...builtLines.map((l) => ({
-        accountId: l.incomeAccountId,
-        description: `${l.serviceName}: ${l.description}`,
-        debitCents: 0,
-        creditCents: l.amountCents,
-        entityName: customer.name,
-      })),
+      ...creditLines,
     ],
   });
 
   const invoice: QboInvoice = {
-    id: `inv-${Date.now()}`,
+    id: invId,
     invoiceNumber: nextInvNum,
     customerId: customer.id,
     customerName: customer.name,
     date: input.date,
     dueDate: input.dueDate,
     status: "Open",
+    subtotalCents,
+    taxRatePercent: effectiveTaxRate,
+    taxCents,
     totalCents,
     balanceDueCents: totalCents,
     lines: builtLines,
@@ -3009,4 +3577,222 @@ export function runAiAutoCategorizer(): { analyzedCount: number } {
     `Generated category suggestions & reasoning for ${analyzedCount} bank transactions`
   );
   return { analyzedCount };
+}
+
+export function matchBankTransaction(input: {
+  transactionId: string;
+  matchType: "invoice" | "bill";
+  targetId: string;
+}): QboJournalEntry {
+  assertCanWrite();
+  const store = getRawStore();
+  const tx = store.bankTransactions.find((t) => t.id === input.transactionId);
+  if (!tx) throw new Error("Bank transaction not found.");
+  if (tx.status === "categorized") {
+    throw new Error("Bank transaction is already categorized or matched.");
+  }
+
+  const bankAcc = store.accounts.find((a) => a.id === tx.bankAccountId);
+  if (!bankAcc) throw new Error("Bank account not found.");
+
+  if (input.matchType === "invoice") {
+    if (tx.amountCents <= 0) {
+      throw new Error(
+        "Only positive bank deposits (Money In) can be matched to Customer Invoices."
+      );
+    }
+    const inv = store.invoices.find((i) => i.id === input.targetId);
+    if (!inv || inv.status === "Paid" || inv.balanceDueCents <= 0) {
+      throw new Error("Open customer invoice not found.");
+    }
+
+    const depositCents = tx.amountCents;
+    const arClearedCents = Math.min(depositCents, inv.balanceDueCents);
+    const excessCents = depositCents - arClearedCents;
+
+    const lines: Array<{
+      accountId: string;
+      description?: string;
+      debitCents: number;
+      creditCents: number;
+      entityName?: string;
+    }> = [
+      {
+        accountId: bankAcc.id,
+        description: `Bank Deposit matched to Invoice #${inv.invoiceNumber}`,
+        debitCents: depositCents,
+        creditCents: 0,
+        entityName: inv.customerName,
+      },
+      {
+        accountId: "acc-1100",
+        description: `Clear Invoice #${inv.invoiceNumber} (${tx.description})`,
+        debitCents: 0,
+        creditCents: arClearedCents,
+        entityName: inv.customerName,
+      },
+    ];
+
+    if (excessCents > 0) {
+      lines.push({
+        accountId: "acc-4000",
+        description: `Overpayment / extra revenue on Invoice #${inv.invoiceNumber}`,
+        debitCents: 0,
+        creditCents: excessCents,
+        entityName: inv.customerName,
+      });
+    }
+
+    const je = postJournalEntry({
+      date: tx.date,
+      memo: `Bank Match: Deposit applied to Invoice #${inv.invoiceNumber} (${inv.customerName})`,
+      sourceType: "invoice_payment",
+      sourceId: inv.id,
+      lines,
+    });
+
+    inv.balanceDueCents = Math.max(0, inv.balanceDueCents - arClearedCents);
+    if (inv.balanceDueCents === 0) {
+      inv.status = "Paid";
+    }
+    inv.paymentJournalEntryId = je.id;
+
+    tx.status = "categorized";
+    tx.matchedInvoiceId = inv.id;
+    tx.suggestedAccountId = "acc-1100";
+    tx.payee = inv.customerName;
+    tx.postedJournalEntryId = je.id;
+
+    appendAuditLog(
+      "Bank Deposit Matched to Invoice",
+      `Matched ${tx.description} to Invoice #${inv.invoiceNumber} (${inv.customerName})`,
+      depositCents
+    );
+    return je;
+  }
+
+  // matchType === "bill"
+  if (tx.amountCents >= 0) {
+    throw new Error(
+      "Only negative bank outflows (Money Out) can be matched to Vendor Bills."
+    );
+  }
+  const bill = store.expenses.find(
+    (e) => e.id === input.targetId && e.type === "Bill" && e.status !== "Paid"
+  );
+  if (!bill) {
+    throw new Error("Open vendor bill not found.");
+  }
+
+  const paidCents = Math.abs(tx.amountCents);
+  const apClearedCents = Math.min(paidCents, bill.amountCents);
+  const excessOutflowCents = paidCents - apClearedCents;
+
+  const lines: Array<{
+    accountId: string;
+    description?: string;
+    debitCents: number;
+    creditCents: number;
+    entityName?: string;
+  }> = [
+    {
+      accountId: "acc-2000",
+      description: `Clear Bill ${bill.refNumber} (${tx.description})`,
+      debitCents: apClearedCents,
+      creditCents: 0,
+      entityName: bill.vendorName,
+    },
+  ];
+
+  if (excessOutflowCents > 0) {
+    lines.push({
+      accountId: bill.categoryAccountId || "acc-5010",
+      description: `Additional expense on Bill ${bill.refNumber}`,
+      debitCents: excessOutflowCents,
+      creditCents: 0,
+      entityName: bill.vendorName,
+    });
+  }
+
+  lines.push({
+    accountId: bankAcc.id,
+    description: `Bank Payment matched to Bill ${bill.refNumber}`,
+    debitCents: 0,
+    creditCents: paidCents,
+    entityName: bill.vendorName,
+  });
+
+  const je = postJournalEntry({
+    date: tx.date,
+    memo: `Bank Match: Payment applied to Bill ${bill.refNumber} (${bill.vendorName})`,
+    sourceType: "bill_payment",
+    sourceId: bill.id,
+    lines,
+  });
+
+  if (paidCents >= bill.amountCents) {
+    bill.status = "Paid";
+  } else {
+    bill.amountCents -= apClearedCents;
+  }
+  bill.paymentJournalEntryId = je.id;
+
+  tx.status = "categorized";
+  tx.matchedBillId = bill.id;
+  tx.suggestedAccountId = "acc-2000";
+  tx.payee = bill.vendorName;
+  tx.postedJournalEntryId = je.id;
+
+  appendAuditLog(
+    "Bank Outflow Matched to Bill",
+    `Matched ${tx.description} to Bill ${bill.refNumber} (${bill.vendorName})`,
+    paidCents
+  );
+  return je;
+}
+
+export function createCustomer(input: {
+  name: string;
+  company?: string;
+  email?: string;
+  phone?: string;
+}): QboCustomer {
+  assertCanWrite();
+  const store = getRawStore();
+  const cleanName = input.name.trim();
+  if (!cleanName) throw new Error("Customer name is required.");
+
+  const customer: QboCustomer = {
+    id: `cust-${Date.now()}`,
+    name: cleanName,
+    company: input.company?.trim() || cleanName,
+    email: input.email?.trim() || "",
+    phone: input.phone?.trim() || "",
+  };
+  store.customers.push(customer);
+  appendAuditLog("Customer Added", `${customer.name} (${customer.company})`);
+  return customer;
+}
+
+export function createVendor(input: {
+  name: string;
+  email?: string;
+  phone?: string;
+  defaultExpenseAccountId?: string;
+}): QboVendor {
+  assertCanWrite();
+  const store = getRawStore();
+  const cleanName = input.name.trim();
+  if (!cleanName) throw new Error("Vendor name is required.");
+
+  const vendor: QboVendor = {
+    id: `vend-${Date.now()}`,
+    name: cleanName,
+    email: input.email?.trim() || "",
+    phone: input.phone?.trim() || "",
+    defaultExpenseAccountId: input.defaultExpenseAccountId || "acc-5010",
+  };
+  store.vendors.push(vendor);
+  appendAuditLog("Vendor Added", vendor.name);
+  return vendor;
 }

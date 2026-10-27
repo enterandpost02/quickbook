@@ -46,6 +46,7 @@ export function QboWorkspace({
   const [activeModal, setActiveModal] = useState<ActiveModalType>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showOrgDropdown, setShowOrgDropdown] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNewCompanyModal, setShowNewCompanyModal] = useState(false);
   const [newCompanyName, setNewCompanyName] = useState("");
   const [newCompanyTemplate, setNewCompanyTemplate] = useState<
@@ -352,8 +353,106 @@ export function QboWorkspace({
             >
               <Settings className="h-4 w-4" />
             </button>
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#0077C5] text-white text-xs font-bold">
-              CD
+
+            {/* Authenticated User Session & Profile Dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => setShowUserMenu((v) => !v)}
+                className="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 hover:bg-slate-100 pl-1 pr-2.5 py-1 transition-colors"
+                title="User Profile & Session"
+              >
+                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#0077C5] text-white text-xs font-bold">
+                  {(
+                    state.teamMembers.find((m) => m.role === state.activeRole)
+                      ?.name ?? "Craig Carlson"
+                  )
+                    .split(" ")
+                    .map((n) => n[0])
+                    .join("")
+                    .slice(0, 2)}
+                </div>
+                <span className="hidden lg:inline text-xs font-semibold text-slate-700">
+                  {state.teamMembers.find((m) => m.role === state.activeRole)
+                    ?.name ?? "Craig Carlson"}
+                </span>
+                <ChevronDown className="h-3 w-3 text-slate-400" />
+              </button>
+
+              {showUserMenu && (
+                <div className="absolute right-0 mt-2 w-72 rounded-xl border border-slate-200 bg-white shadow-xl z-50 overflow-hidden">
+                  <div className="p-3.5 bg-[#1E252B] text-white">
+                    <p className="text-xs font-bold">
+                      {state.teamMembers.find(
+                        (m) => m.role === state.activeRole
+                      )?.name ?? "Craig Carlson"}
+                    </p>
+                    <p className="text-[11px] text-slate-300 truncate">
+                      {state.teamMembers.find(
+                        (m) => m.role === state.activeRole
+                      )?.email ?? "craig@carlsonlandscaping.com"}
+                    </p>
+                    <div className="mt-2 flex items-center gap-1.5">
+                      <span className="rounded bg-[#2CA01C] px-2 py-0.5 text-[10px] font-bold uppercase text-white">
+                        {state.activeRole}
+                      </span>
+                      <span className="text-[10px] text-slate-300 truncate">
+                        · {state.companyName}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="p-2 border-b border-slate-100">
+                    <p className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      Switch Active User Role
+                    </p>
+                    {(["owner", "bookkeeper", "accountant"] as const).map(
+                      (r) => (
+                        <button
+                          key={r}
+                          onClick={async () => {
+                            setShowUserMenu(false);
+                            await runAction(
+                              "switch_role",
+                              { role: r },
+                              `Switched session role to ${r.toUpperCase()}`
+                            );
+                          }}
+                          className={`w-full flex items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-xs font-medium ${
+                            state.activeRole === r
+                              ? "bg-emerald-50 text-[#2CA01C] font-bold"
+                              : "text-slate-700 hover:bg-slate-50"
+                          }`}
+                        >
+                          <span className="capitalize">
+                            {r} (
+                            {state.teamMembers.find((m) => m.role === r)
+                              ?.name ?? r}
+                            )
+                          </span>
+                          {state.activeRole === r && (
+                            <Check className="h-3.5 w-3.5 text-[#2CA01C]" />
+                          )}
+                        </button>
+                      )
+                    )}
+                  </div>
+
+                  <div className="p-2 bg-slate-50 flex flex-col gap-1">
+                    <a
+                      href="/login"
+                      className="w-full rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-200/70 text-left"
+                    >
+                      Sign in as another user (/login)
+                    </a>
+                    <a
+                      href="/signup"
+                      className="w-full rounded-lg px-2.5 py-1.5 text-xs font-semibold text-[#0077C5] hover:bg-sky-50 text-left"
+                    >
+                      + Register new user &amp; company (/signup)
+                    </a>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </header>

@@ -2,10 +2,15 @@ import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import {
   categorizeBankTransaction,
+  computeReportsForFilter,
   convertEstimateToInvoice,
+  createCustomer,
+  createInvoice,
   createTransfer,
+  createVendor,
   getComputedQboState,
   importBankCsvRows,
+  matchBankTransaction,
   postJournalEntry,
   resetQboStore,
   reverseJournalEntry,
@@ -223,5 +228,161 @@ describe("QuickBooks Double-Entry Accounting Engine & CSV Suite", () => {
       state.securityAudit.passedCount,
       state.securityAudit.totalChecks
     );
+  });
+
+  it("11. Automatic Sales Tax on Invoices calculates exact integer cents, credits 2200 Sales Tax Payable, and keeps books balanced", () => {
+    const before = getComputedQboState();
+    const taxBefore =
+      before.accountsWithBalances.find((a) => a.id === "acc-2200")
+        ?.balanceCents ?? 0;
+
+    // $1,000.00 taxable line at 8.25% => $82.50 (8250 cents) tax, $1,082.50 (108250 cents) total A/R
+    const inv = createInvoice({
+      customerId: "cust-1",
+      date: "2026-10-27",
+      dueDate: "2026-11-26",
+      applySalesTax: true,
+      taxRatePercent: 8.25,
+      lines: [
+        {
+          serviceName: "Landscape Design & Installation",
+          description: "Taxable installation package",
+          quantity: 1,
+          rateCents: 100000,
+          incomeAccountId: "acc-4000",
+          taxable: true,
+        },
+      ],
+    });
+
+    assert.equal(inv.subtotalCents, 100000);
+    assert.equal(inv.taxCents, 8250);
+    assert.equal(inv.totalCents, 108250);
+    assert.equal(inv.balanceDueCents, 108250);
+
+    const after = getComputedQboState();
+    const taxAfter =
+      after.accountsWithBalances.find((a) => a.id === "acc-2200")
+        ?.balanceCents ?? 0;
+    assert.equal(taxAfter - taxBefore, 8250);
+    assert.equal(after.reports.balanceSheet.isBalanced, true);
+    assert.equal(after.reports.trialBalance.isBalanced, true);
+  });
+
+  it("12. Bank Feed Deposit & Outflow Matching to Open Invoices and Open Bills clears A/R and A/P without double-counting", () => {
+    // Match btx-3 (+$1,250.00 deposit) as a partial payment to open Invoice inv-1002 ($3,420.00 balance due)
+    matchBankTransaction({
+      transactionId: "btx-3",
+      matchType: "invoice",
+      targetId: "inv-1002",
+    });
+
+    const afterPartial = getComputedQboState();
+    const partialInv = afterPartial.invoices.find((i) => i.id === "inv-1002");
+    assert.equal(partialInv?.balanceDueCents, 217000);
+    assert.equal(partialInv?.status, "Open");
+
+    // Import remaining +$2,170.00 deposit for inv-1002 and -$1,120.00 outflow for open Bill exp-3
+    importBankCsvRows({
+      bankAccountId: "acc-1000",
+      rows: [
+        {
+          date: "2026-10-27",
+          description: "ACH DEPOSIT FREEMAN SPORTING GOODS INV-1002",
+          amountCents: 217000,
+        },
+        {
+          date: "2026-10-27",
+          description: "ACH PMT NORTON LUMBER BILL NL-409",
+          amountCents: -112000,
+        },
+      ],
+    });
+    const midState = getComputedQboState();
+    const invBankTx = midState.bankTransactions.find((t) =>
+      t.description.includes("FREEMAN SPORTING GOODS INV-1002")
+    );
+    const billBankTx = midState.bankTransactions.find((t) =>
+      t.description.includes("NORTON LUMBER BILL NL-409")
+    );
+    assert.ok(invBankTx);
+    assert.ok(billBankTx);
+
+    matchBankTransaction({
+      transactionId: invBankTx.id,
+      matchType: "invoice",
+      targetId: "inv-1002",
+    });
+
+    matchBankTransaction({
+      transactionId: billBankTx.id,
+      matchType: "bill",
+      targetId: "exp-3",
+    });
+
+    const finalState = getComputedQboState();
+    const matchedInv = finalState.invoices.find((i) => i.id === "inv-1002");
+    const matchedBill = finalState.expenses.find((e) => e.id === "exp-3");
+
+    assert.equal(matchedInv?.status, "Paid");
+    assert.equal(matchedInv?.balanceDueCents, 0);
+    assert.equal(matchedBill?.status, "Paid");
+    assert.equal(finalState.reports.balanceSheet.isBalanced, true);
+    assert.equal(finalState.reports.trialBalance.isBalanced, true);
+  });
+
+  it("13. Cash Basis & Custom Date-Range Report Filtering preserve exact Balance Sheet & Trial Balance equality", () => {
+    const state = getComputedQboState();
+
+    // Accrual basis vs Cash basis across all dates:
+    // Seed data has unpaid invoices (A/R $8,250.00) and unpaid bill (A/P $1,850.00),
+    // so Cash Basis Net Income differs from Accrual Basis while keeping Balance Sheet balanced!
+    const accrualAll = computeReportsForFilter(state, { basis: "accrual" });
+    const cashAll = computeReportsForFilter(state, { basis: "cash" });
+
+    assert.equal(accrualAll.balanceSheet.isBalanced, true);
+    assert.equal(accrualAll.trialBalance.isBalanced, true);
+    assert.equal(cashAll.balanceSheet.isBalanced, true);
+    assert.equal(cashAll.trialBalance.isBalanced, true);
+    assert.notEqual(
+      accrualAll.profitAndLoss.totalIncomeCents,
+      cashAll.profitAndLoss.totalIncomeCents
+    );
+
+    // Date-range filtered reports (October 2026 only, where prior Sept 2026 entries roll into Retained Earnings)
+    const accrualOct = computeReportsForFilter(state, {
+      basis: "accrual",
+      startDate: "2026-10-01",
+      endDate: "2026-10-31",
+    });
+    const cashOct = computeReportsForFilter(state, {
+      basis: "cash",
+      startDate: "2026-10-01",
+      endDate: "2026-10-31",
+    });
+
+    assert.equal(accrualOct.balanceSheet.isBalanced, true);
+    assert.equal(accrualOct.trialBalance.isBalanced, true);
+    assert.equal(cashOct.balanceSheet.isBalanced, true);
+    assert.equal(cashOct.trialBalance.isBalanced, true);
+  });
+
+  it("14. Creating new Customer and new Vendor profiles works and integrates with ledger workflows", () => {
+    const cust = createCustomer({
+      name: "Redwood Tech Campus",
+      company: "Redwood Properties LLC",
+      email: "ap@redwoodcampus.com",
+      phone: "(650) 555-0192",
+    });
+    const vend = createVendor({
+      name: "Pacific Stone Supply",
+      email: "billing@pacificstone.com",
+      phone: "(650) 555-0177",
+      defaultExpenseAccountId: "acc-5010",
+    });
+
+    const state = getComputedQboState();
+    assert.ok(state.customers.some((c) => c.id === cust.id));
+    assert.ok(state.vendors.some((v) => v.id === vend.id));
   });
 });

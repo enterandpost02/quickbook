@@ -3,18 +3,20 @@ import {
   categorizeBankTransaction,
   convertEstimateToInvoice,
   createAccount,
+  createCustomer,
   createEstimate,
   createExpenseOrBill,
   createInvoice,
   createProductService,
   createRule,
   createTransfer,
+  createVendor,
   excludeBankTransaction,
   finishReconciliation,
-  getComputedQboState,
   getRawStore,
   importBankCsvRows,
   inviteTeamMember,
+  matchBankTransaction,
   payVendorBill,
   postJournalEntry,
   receiveInvoicePayment,
@@ -69,6 +71,18 @@ export async function POST(request: Request) {
       }
       case "categorize_bank_tx": {
         categorizeBankTransaction(payload);
+        break;
+      }
+      case "match_bank_tx": {
+        matchBankTransaction(payload);
+        break;
+      }
+      case "create_customer": {
+        createCustomer(payload);
+        break;
+      }
+      case "create_vendor": {
+        createVendor(payload);
         break;
       }
       case "categorize_all_suggested": {

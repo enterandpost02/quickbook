@@ -15,8 +15,11 @@
   - Any correction or voiding operation **MUST** create a reversing journal entry (`reverseJournalEntry()`) that swaps debits and credits and links `reversesEntryId` / `reversedByEntryId`.
 - **Rule 4 — Closed Period Lock (`lockedThroughDate`):**
   - When books are closed through a date (`lockedThroughDate`), no journal entry or reversal may be posted on or before that date unless an Owner explicitly unlocks the period.
-- **Rule 5 — Accounting Equation Integrity:**
-  - At all times, the Trial Balance must satisfy `Total Debits === Total Credits` and the Balance Sheet must satisfy `Total Assets === Total Liabilities + Equity (including Net Income)`.
+- **Rule 5 — Accounting Equation Integrity (Accrual & Cash Basis, Any Date Range):**
+  - At all times, across both **Accrual Basis** and **Cash Basis** and for any `[startDate, endDate]` filter (`computeReportsForFilter`), the Trial Balance must satisfy `Total Debits === Total Credits` and the Balance Sheet must satisfy `Total Assets === Total Liabilities + Equity (including Prior Retained Earnings + Current Period Net Income)`.
+- **Rule 6 — Sales Tax & Bank Feed Matching Precision:**
+  - Sales tax on invoices must be computed in integer cents (`Math.round((taxableSubtotalCents * taxRatePercent) / 100)`) and credited to `2200 Sales Tax Payable`.
+  - Matching a bank feed deposit to an open Invoice (`sourceType: "invoice_payment"`) or a bank outflow to an open Vendor Bill (`sourceType: "bill_payment"`) must clear `1100 Accounts Receivable` or `2000 Accounts Payable` without double-counting revenue or expenses.
 
 ## 2. Security & Multi-Tenancy Rules
 - **Organization Isolation (`organization_id`):**

@@ -55,3 +55,22 @@
 - Built full **Multi-Company Switcher & "+ New Company" Creation Workflow** in [`src/components/qbo/qbo-workspace.tsx`](../src/components/qbo/qbo-workspace.tsx) and [`src/lib/qbo-db.ts`](../src/lib/qbo-db.ts) allowing unlimited isolated companies in Supabase (either **Fresh $0.00 Books** with 31 default accounts or **Pre-loaded Sample Data**) with tenant-prefixed relational primary keys (`${organizationId}:${id}`).
 - Wrapped async Supabase data loading in [`src/app/(dashboard)/dashboard/page.tsx`](../src/app/(dashboard)/dashboard/page.tsx) with `<Suspense>` and `export const instant = false` to satisfy Next.js 16 `cacheComponents` streaming requirements.
 - Optimized Supabase latency in [`src/lib/qbo-db.ts`](../src/lib/qbo-db.ts) and [`src/app/api/qbo/route.ts`](../src/app/api/qbo/route.ts) using an in-memory multi-company read-through cache (`ensureCacheInitialized`) and non-blocking write-behind persistence queue (`saveQboStoreFast` + `Promise.all` parallelized batch writes), eliminating 12+ sequential remote DB round-trips per click.
+
+## Phase 10 — Cash vs. Accrual Basis, Date-Range Reports, Invoice Sales Tax, Bank Matching & Directory Modals
+- **Report Date-Range Filters & Cash vs. Accrual Basis Engine (`computeReportsForFilter`):**
+  - Added live **Accrual vs. Cash Basis** and **Date Range (`All Dates`, `October 2026`, `September 2026`, `Custom Range`)** filtering in [`src/lib/qbo-store.ts`](../src/lib/qbo-store.ts) and [`src/components/qbo/qbo-views.tsx`](../src/components/qbo/qbo-views.tsx).
+  - Under **Cash Basis**, unpaid invoices (`A/R 1100`) and unpaid vendor bills (`A/P 2000`) are excluded until cash changes hands; `invoice_payment` and `bill_payment` entries map directly to their underlying Income/Sales Tax and Expense/COGS accounts with exact integer-cent allocation.
+  - Under **Date-Range Filtering**, prior-period net income (`date < startDate`) automatically rolls into `3200 Retained Earnings (Prior to startDate)` so the Balance Sheet (`Total Assets === Total Liabilities + Total Equity`) and Trial Balance (`Debits === Credits`) remain 100% balanced for any date range.
+- **Bank Feed Deposit & Payment Matching (`matchBankTransaction`):**
+  - Added **Categorize vs. Match Invoice / Bill** toggle in the Banking Center (`"For review"` tab) with automatic **EXACT INVOICE / BILL MATCH** detection.
+  - Matching a deposit to an open Invoice posts `Debit Bank / Credit A/R 1100` (`sourceType: "invoice_payment"`) and updates invoice `balanceDueCents` / `Paid` status without double-counting revenue.
+  - Matching an outflow to an open Vendor Bill posts `Debit A/P 2000 / Credit Bank` (`sourceType: "bill_payment"`) and marks the bill `Paid` without double-counting expenses.
+- **Automatic Sales Tax Calculation on Invoices (`createInvoice`):**
+  - Added per-line `taxable` checkboxes, **Charge Sales Tax (`2200 Sales Tax Payable`)** toggle, and customizable `taxRatePercent` (default `8.25%`) in `CreateInvoiceModal` ([`src/components/qbo/qbo-modals.tsx`](../src/components/qbo/qbo-modals.tsx)).
+  - Computes `taxCents = Math.round((taxableSubtotalCents * effectiveTaxRate) / 100)` in integer cents, credits `2200 Sales Tax Payable` for `taxCents`, credits `4000+ Income` for `subtotalCents`, and debits `1100 Accounts Receivable` for `subtotalCents + taxCents`.
+- **Create New Customer & Create New Vendor Modals (`createCustomer`, `createVendor`):**
+  - Added `CreateCustomerModal` and `CreateVendorModal` accessible from `+ New` Quick Create, the Sales & Invoices header (`+ New Customer`), and the Expenses & Vendors header (`+ New Vendor`).
+- **Authenticated User Session & Role Switcher Menu:**
+  - Added an interactive User Session & Company Profile dropdown on the top-right header avatar in [`src/components/qbo/qbo-workspace.tsx`](../src/components/qbo/qbo-workspace.tsx) showing active user details, role switcher (`Owner`, `Bookkeeper`, `Accountant`), and direct links to `/login` and `/signup`.
+- **Expanded Automated Test Suite (14/14 Passing Tests):**
+  - Added unit tests 11–14 in [`src/lib/__tests__/qbo-engine.test.ts`](../src/lib/__tests__/qbo-engine.test.ts) verifying integer-cent Sales Tax math, partial & full Bank Feed Invoice/Bill matching, Cash vs. Accrual basis & Date-Range report balance invariants, and Customer/Vendor creation.
