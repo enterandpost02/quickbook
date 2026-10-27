@@ -93,3 +93,18 @@
   - Updated Customers and Vendors directory tables in [`src/components/qbo/qbo-views.tsx`](../src/components/qbo/qbo-views.tsx) to display Contact Name, Company, Tax ID badges, Default Category pills, formatted address, and contact info.
 - **Expanded Automated Test Suite (18/18 Passing Tests):**
   - Added Tests 17 and 18 in [`src/lib/__tests__/qbo-engine.test.ts`](../src/lib/__tests__/qbo-engine.test.ts) verifying comparison date range shifting (whole month and arbitrary days), comparative reports variance math, double-entry invariants, customer/vendor profile fields, and global search query resolution across all record types.
+
+## Phase 12 — Clean Production Data Controls, Redesigned New Company Modal & Vercel Readiness
+- **Production Data Management & Clean Books Reset (`wipeAllCompanyTransactions`):**
+  - Implemented `wipeAllCompanyTransactions()` in [`src/lib/qbo-store.ts`](../src/lib/qbo-store.ts) to instantly reset all journal entries, bank feed items, invoices, expenses, estimates, reconciliations, customers, and vendors while preserving the core 31 QuickBooks Chart of Accounts with clean `$0.00` balances.
+  - Added one-click **"Wipe Sample Data ($0.00)"** action in the dark left sidebar with confirmation guard, allowing instant transformation of any demo company into clean production books.
+  - Added a dedicated **"Production Data Management & Clean Books"** panel in the Audit Log & Security screen (`AuditLogView`) with live readiness badge, wipe controls, practice data reload, and full JSON backup export.
+  - Wired `wipe_transactions` action through [`src/app/api/qbo/route.ts`](../src/app/api/qbo/route.ts) with immediate read-through cache synchronization and non-blocking PostgreSQL persistence.
+- **Redesigned "+ Create New Company" Modal UI & Fields:**
+  - Overhauled the modal in [`src/components/qbo/qbo-workspace.tsx`](../src/components/qbo/qbo-workspace.tsx): removed developer-centric jargon ("in Supabase"), added `Company Name *`, `Industry / Business Type` selector (9 real-world industries), `Tax ID / EIN` input, and an informative `Currency & Books: USD ($) · Fiscal Year: Jan – Dec` banner.
+  - Set **"Fresh Company ($0.00 Balances)"** as the default recommended option for live accounting, with an option to select "Pre-loaded Practice Data" for onboarding.
+  - Updated [`src/lib/qbo-db.ts`](../src/lib/qbo-db.ts) to persist `industry` and `taxId` directly into database organizations with automatic audit trail logging.
+- **Automated Test Suite Expansion (19/19 Passing Tests):**
+  - Added **Test 19** in [`src/lib/__tests__/qbo-engine.test.ts`](../src/lib/__tests__/qbo-engine.test.ts) verifying that `wipeAllCompanyTransactions()` wipes all transactional records, resets every account balance to `$0.00`, preserves double-entry equilibrium, and confirms `createFreshCompanyData()` generates an empty company with all 31 standard accounts.
+- **Next.js 16 Production Build Verification for Vercel:**
+  - Ran `npm run build` with Turbopack and verified successful static and dynamic page generation with zero prerendering or TypeScript errors.

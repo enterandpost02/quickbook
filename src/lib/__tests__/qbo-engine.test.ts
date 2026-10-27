@@ -23,6 +23,8 @@ import {
   runAiAutoCategorizer,
   setActiveRole,
   setPeriodLockDate,
+  wipeAllCompanyTransactions,
+  createFreshCompanyData,
 } from "../qbo-store";
 import {
   searchQboState,
@@ -669,5 +671,41 @@ describe("QuickBooks Double-Entry Accounting Engine & CSV Suite", () => {
     // Query by dollar amount
     const amtRes = searchQboState(state, "$1,250.00");
     assert.ok(amtRes.some((r) => r.amountCents === 125000));
+  });
+
+  it("19. Wipe All Sample Data resets company to fresh $0.00 books with balanced ledger", () => {
+    // 1. Verify initially we have transactions
+    const before = getComputedQboState();
+    assert.ok(before.journalEntries.length > 0);
+    assert.ok(before.invoices.length > 0);
+    assert.ok(before.expenses.length > 0);
+
+    // 2. Wipe all sample transactions
+    wipeAllCompanyTransactions();
+
+    // 3. Verify clean $0.00 state
+    const after = getComputedQboState();
+    assert.equal(after.journalEntries.length, 0);
+    assert.equal(after.invoices.length, 0);
+    assert.equal(after.expenses.length, 0);
+    assert.equal(after.bankTransactions.length, 0);
+    assert.equal(after.estimates.length, 0);
+    assert.equal(after.kpis.openInvoicesCents, 0);
+    assert.equal(after.kpis.openBillsCents, 0);
+    assert.equal(after.reports.profitAndLoss.totalIncomeCents, 0);
+    assert.equal(after.reports.profitAndLoss.totalExpensesCents, 0);
+    assert.equal(after.reports.profitAndLoss.netIncomeCents, 0);
+    assert.equal(after.reports.balanceSheet.totalAssetsCents, 0);
+    assert.equal(after.reports.balanceSheet.totalLiabilitiesAndEquityCents, 0);
+    assert.equal(after.reports.balanceSheet.isBalanced, true);
+    assert.equal(after.reports.trialBalance.isBalanced, true);
+
+    // 4. Verify createFreshCompanyData also generates fresh $0.00 company
+    const fresh = createFreshCompanyData("Acme Corp LLC");
+    assert.equal(fresh.companyName, "Acme Corp LLC");
+    assert.equal(fresh.journalEntries.length, 0);
+    assert.equal(fresh.invoices.length, 0);
+    assert.equal(fresh.expenses.length, 0);
+    assert.equal(fresh.accounts.length, 31);
   });
 });

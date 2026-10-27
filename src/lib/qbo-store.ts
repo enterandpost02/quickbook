@@ -1591,6 +1591,30 @@ export function resetQboStore(): QboStoreData {
   return globalStore.__qboStoreData;
 }
 
+export function wipeAllCompanyTransactions(): QboStoreData {
+  assertCanWrite();
+  const store = getRawStore();
+  store.journalEntries = [];
+  store.bankTransactions = [];
+  store.invoices = [];
+  store.expenses = [];
+  store.estimates = [];
+  store.reconciliations = [];
+  store.customers = [];
+  store.vendors = [];
+  store.lockedThroughDate = null;
+  for (const acc of store.accounts) {
+    if (acc.bankBalanceCents !== undefined) {
+      acc.bankBalanceCents = 0;
+    }
+  }
+  appendAuditLog(
+    "All Transactions Wiped",
+    "Cleared all sample invoices, bills, journal entries, and bank transactions. Books reset to clean $0.00 balances for live production use."
+  );
+  return store;
+}
+
 function appendAuditLog(
   action: string,
   details: string,

@@ -29,6 +29,9 @@
   - Comparative report variances (`diffCents = current - prior`) must use exact integer subtraction. Percentage changes must handle division-by-zero safely (`"—"` when prior period is $0.00).
   - Filtering reports by `entityName` filters journal transactions at the entry level, guaranteeing that `Debits === Credits` is preserved in every filtered view.
   - Global Search (`searchQboState`) must parse exact currency formats (`$1,250.00`, `425`, `90.50`) into integer cents and match across all 9 entity types with multi-term `AND` semantics and alias awareness.
+- **Rule 9 — Production Data Reset & Chart of Accounts Preservation:**
+  - Wiping company transactions (`wipeAllCompanyTransactions`) must clear all transactional data (journal entries, lines, bank feeds, invoices, bills, expenses, estimates, reconciliations, customers, and vendors) while strictly preserving all 31 standard Chart of Accounts.
+  - Every account's `balanceCents` and `bankBalanceCents` must be reset to exactly `0`, leaving `Total Assets ($0.00) === Total Liabilities + Equity ($0.00)`.
 
 ## 2. Security & Multi-Tenancy Rules
 - **Organization Isolation (`organization_id`):**

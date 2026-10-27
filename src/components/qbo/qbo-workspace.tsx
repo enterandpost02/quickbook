@@ -20,6 +20,7 @@ import {
   ScrollText,
   Search,
   Settings,
+  Trash2,
   Upload,
   X,
 } from "lucide-react";
@@ -58,6 +59,8 @@ export function QboWorkspace({
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNewCompanyModal, setShowNewCompanyModal] = useState(false);
   const [newCompanyName, setNewCompanyName] = useState("");
+  const [newCompanyIndustry, setNewCompanyIndustry] = useState("Professional, Scientific & Technical Services");
+  const [newCompanyTaxId, setNewCompanyTaxId] = useState("");
   const [newCompanyTemplate, setNewCompanyTemplate] = useState<
     "empty" | "sample"
   >("empty");
@@ -275,26 +278,59 @@ export function QboWorkspace({
           </div>
         </div>
 
-        {/* Bottom Sidebar Info */}
+        {/* Bottom Sidebar Info & Clean Data Controls */}
         <div className="p-4 border-t border-slate-700/70 text-[11px] text-slate-400 space-y-2">
           <div className="rounded-lg bg-slate-800/90 p-2.5 border border-slate-700">
-            <p className="font-semibold text-slate-200">Static &amp; CSV Mode</p>
-            <p className="text-[10px] text-slate-400 mt-0.5">
-              In-memory integer-cents engine. Manual &amp; CSV changes update reports live.
+            <div className="flex items-center justify-between">
+              <p className="font-semibold text-slate-200">Company Ledger</p>
+              <span className="text-[10px] text-emerald-400 font-bold bg-emerald-950/80 px-1.5 py-0.2 rounded border border-emerald-800">
+                Production Ready
+              </span>
+            </div>
+            <p className="text-[10px] text-slate-400 mt-1 truncate">
+              Active: <span className="text-slate-200 font-medium">{state.companyName}</span>
             </p>
           </div>
+
           <button
-            onClick={() =>
-              runAction(
-                "reset_demo",
-                {},
-                "Reset sample company data to initial state"
-              )
-            }
-            className="w-full flex items-center justify-center gap-1.5 rounded-lg border border-slate-700 py-1.5 text-xs text-slate-300 hover:bg-slate-800"
+            onClick={async () => {
+              if (
+                window.confirm(
+                  `Wipe all sample data for "${state.companyName}"?\n\nThis removes all invoices, bills, journal entries, and bank transactions so you can start with fresh $0.00 books for your real business.`
+                )
+              ) {
+                await runAction(
+                  "wipe_transactions",
+                  {},
+                  `Wiped all sample transactions for "${state.companyName}". Books are now fresh with $0.00 balances!`
+                );
+              }
+            }}
+            className="w-full flex items-center justify-center gap-1.5 rounded-lg border border-rose-900/60 bg-rose-950/30 py-1.5 text-xs font-semibold text-rose-300 hover:bg-rose-900/50 hover:text-rose-100 transition-colors"
+            title="Delete all sample transactions and reset to $0.00"
+          >
+            <Trash2 className="h-3 w-3 text-rose-400" />
+            Wipe Sample Data ($0.00)
+          </button>
+
+          <button
+            onClick={async () => {
+              if (
+                window.confirm(
+                  `Reset "${state.companyName}" to pre-loaded sample practice data?`
+                )
+              ) {
+                await runAction(
+                  "reset_demo",
+                  {},
+                  "Reset sample company data to initial state"
+                );
+              }
+            }}
+            className="w-full flex items-center justify-center gap-1.5 rounded-lg border border-slate-700 py-1 text-[11px] text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
           >
             <RotateCcw className="h-3 w-3" />
-            Reset Sample Data
+            Load Demo Practice Data
           </button>
         </div>
       </aside>
@@ -322,7 +358,7 @@ export function QboWorkspace({
                       Switch Company ({state.organizations?.length ?? 1})
                     </span>
                     <span className="text-[10px] font-semibold text-[#2CA01C]">
-                      Supabase Multi-Tenant
+                      Multi-Company
                     </span>
                   </div>
 
@@ -761,20 +797,26 @@ export function QboWorkspace({
 
       {/* Create New Company Modal */}
       {showNewCompanyModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden">
-            <div className="px-6 py-4 bg-[#1E252B] text-white flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Building2 className="h-5 w-5 text-[#2CA01C]" />
-                <h2 className="text-sm font-bold">
-                  Create New Company in Supabase
-                </h2>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden max-h-[92vh] flex flex-col">
+            <div className="px-6 py-4 bg-[#1E252B] text-white flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/20 text-[#2CA01C] border border-emerald-500/30">
+                  <Building2 className="h-4 w-4 text-[#2CA01C]" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold text-white">Create New Company</h2>
+                  <p className="text-[11px] text-slate-300">
+                    Set up an isolated business ledger with a custom Chart of Accounts
+                  </p>
+                </div>
               </div>
               <button
                 onClick={() => setShowNewCompanyModal(false)}
-                className="text-slate-400 hover:text-white text-xs font-bold"
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-white transition-colors"
+                title="Close"
               >
-                ✕
+                <X className="h-4 w-4" />
               </button>
             </div>
 
@@ -785,20 +827,23 @@ export function QboWorkspace({
                 const createdName = newCompanyName.trim();
                 setShowNewCompanyModal(false);
                 setNewCompanyName("");
+                setNewCompanyTaxId("");
                 await runAction(
                   "create_organization",
                   {
                     name: createdName,
                     template: newCompanyTemplate,
+                    industry: newCompanyIndustry,
+                    taxId: newCompanyTaxId.trim() || undefined,
                   },
-                  `Created and switched to "${createdName}" in Supabase PostgreSQL!`
+                  `Created and switched to company "${createdName}"!`
                 );
               }}
-              className="p-6 space-y-4"
+              className="p-6 space-y-4 overflow-y-auto flex-1"
             >
               <div>
-                <label className="block text-xs font-bold uppercase text-slate-500 mb-1.5">
-                  Company / Legal Business Name
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+                  Company / Legal Business Name *
                 </label>
                 <input
                   type="text"
@@ -806,19 +851,64 @@ export function QboWorkspace({
                   value={newCompanyName}
                   onChange={(e) => setNewCompanyName(e.target.value)}
                   placeholder="e.g. Apex Software Solutions LLC"
-                  className="w-full rounded-lg border border-slate-300 px-3.5 py-2 text-sm focus:border-[#2CA01C] focus:outline-none"
+                  className="w-full rounded-lg border border-slate-300 px-3.5 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-[#2CA01C] focus:ring-1 focus:ring-[#2CA01C] focus:outline-none"
                 />
               </div>
 
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+                    Industry / Business Type
+                  </label>
+                  <select
+                    value={newCompanyIndustry}
+                    onChange={(e) => setNewCompanyIndustry(e.target.value)}
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 focus:border-[#2CA01C] focus:ring-1 focus:ring-[#2CA01C] focus:outline-none"
+                  >
+                    <option value="Professional, Scientific & Technical Services">Professional &amp; Technical Services</option>
+                    <option value="Software & Information Technology">Software &amp; Information Technology</option>
+                    <option value="Construction & Contracting">Construction &amp; Contracting</option>
+                    <option value="Retail, E-commerce & Wholesale">Retail, E-commerce &amp; Wholesale</option>
+                    <option value="Consulting & Agency Services">Consulting &amp; Agency Services</option>
+                    <option value="Healthcare, Medical & Wellness">Healthcare &amp; Medical</option>
+                    <option value="Real Estate & Property Management">Real Estate &amp; Property</option>
+                    <option value="Landscaping, Facilities & Trades">Landscaping &amp; Trades</option>
+                    <option value="Other / General Business">Other / General Business</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+                    Tax ID / EIN <span className="font-normal text-slate-400 lowercase">(optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={newCompanyTaxId}
+                    onChange={(e) => setNewCompanyTaxId(e.target.value)}
+                    placeholder="XX-XXXXXXX"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:border-[#2CA01C] focus:ring-1 focus:ring-[#2CA01C] focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Informative currency and fiscal banner */}
+              <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3 flex items-center justify-between text-xs text-slate-600">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-slate-800">Currency &amp; Ledger:</span>
+                  <span>United States Dollar (USD $)</span>
+                </div>
+                <span className="text-[11px] text-slate-500 font-medium">Fiscal Year: Jan – Dec</span>
+              </div>
+
               <div>
-                <label className="block text-xs font-bold uppercase text-slate-500 mb-1.5">
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">
                   Initial Books Setup
                 </label>
-                <div className="space-y-2 text-xs">
+                <div className="space-y-2.5">
                   <label
-                    className={`flex items-start gap-2.5 rounded-xl border p-3 cursor-pointer ${
+                    className={`flex items-start gap-3 rounded-xl border p-3.5 cursor-pointer transition-all ${
                       newCompanyTemplate === "empty"
-                        ? "border-[#2CA01C] bg-emerald-50/60"
+                        ? "border-[#2CA01C] bg-emerald-50/70 shadow-2xs ring-1 ring-[#2CA01C]/30"
                         : "border-slate-200 hover:bg-slate-50"
                     }`}
                   >
@@ -827,22 +917,27 @@ export function QboWorkspace({
                       name="companyTemplate"
                       checked={newCompanyTemplate === "empty"}
                       onChange={() => setNewCompanyTemplate("empty")}
-                      className="mt-0.5 accent-[#2CA01C]"
+                      className="mt-1 accent-[#2CA01C]"
                     />
-                    <div>
-                      <span className="font-bold text-slate-900 block">
-                        Fresh Company ($0.00 Balances)
-                      </span>
-                      <span className="text-slate-500">
-                        Starts with the 31 standard QuickBooks Chart of Accounts and 0 transactions—ready for your own manual entries and CSV uploads.
-                      </span>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-xs text-slate-900">
+                          Fresh Company ($0.00 Balances)
+                        </span>
+                        <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-[#2CA01C]">
+                          Recommended for Live
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">
+                        Starts clean with the 31 standard QuickBooks Chart of Accounts and 0 transactions—ready for your real invoices, bills, and bank imports.
+                      </p>
                     </div>
                   </label>
 
                   <label
-                    className={`flex items-start gap-2.5 rounded-xl border p-3 cursor-pointer ${
+                    className={`flex items-start gap-3 rounded-xl border p-3.5 cursor-pointer transition-all ${
                       newCompanyTemplate === "sample"
-                        ? "border-[#2CA01C] bg-emerald-50/60"
+                        ? "border-[#2CA01C] bg-emerald-50/70 shadow-2xs ring-1 ring-[#2CA01C]/30"
                         : "border-slate-200 hover:bg-slate-50"
                     }`}
                   >
@@ -851,34 +946,39 @@ export function QboWorkspace({
                       name="companyTemplate"
                       checked={newCompanyTemplate === "sample"}
                       onChange={() => setNewCompanyTemplate("sample")}
-                      className="mt-0.5 accent-[#2CA01C]"
+                      className="mt-1 accent-[#2CA01C]"
                     />
-                    <div>
-                      <span className="font-bold text-slate-900 block">
-                        Pre-loaded Sample Data
-                      </span>
-                      <span className="text-slate-500">
-                        Pre-populates sample invoices, bills, journal entries, and uncategorized bank feed rows for testing.
-                      </span>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-xs text-slate-900">
+                          Pre-loaded Practice Data
+                        </span>
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
+                          Demo &amp; Testing
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">
+                        Pre-populates sample invoices, bills, journal entries, and bank feed rows for exploring features before entering real data.
+                      </p>
                     </div>
                   </label>
                 </div>
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-2">
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setShowNewCompanyModal(false)}
-                  className="rounded-full border border-slate-300 px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                  className="rounded-full border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={isSubmitting}
-                  className="rounded-full bg-[#2CA01C] px-5 py-2 text-xs font-bold text-white hover:bg-[#248217]"
+                  disabled={isSubmitting || !newCompanyName.trim()}
+                  className="rounded-full bg-[#2CA01C] px-5 py-2 text-xs font-bold text-white hover:bg-[#248217] disabled:opacity-50 transition-colors shadow-2xs"
                 >
-                  Create &amp; Switch Company
+                  {isSubmitting ? "Creating Company..." : "Create & Switch Company"}
                 </button>
               </div>
             </form>

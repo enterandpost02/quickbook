@@ -26,6 +26,7 @@ import {
   runAiAutoCategorizer,
   setActiveRole,
   setPeriodLockDate,
+  wipeAllCompanyTransactions,
 } from "@/lib/qbo-store";
 import {
   createOrganizationInDb,
@@ -54,6 +55,8 @@ export async function POST(request: Request) {
       const newOrgId = await createOrganizationInDb({
         name: payload.name,
         template: payload.template ?? "empty",
+        industry: payload.industry,
+        taxId: payload.taxId,
       });
       const { state } = await loadQboStoreFromDb(newOrgId);
       return NextResponse.json(state);
@@ -161,6 +164,10 @@ export async function POST(request: Request) {
       }
       case "reset_demo": {
         resetQboStore();
+        break;
+      }
+      case "wipe_transactions": {
+        wipeAllCompanyTransactions();
         break;
       }
       default:

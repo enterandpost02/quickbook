@@ -211,6 +211,8 @@ export async function loadQboStoreFromDb(requestedOrgId?: string): Promise<{
 export async function createOrganizationInDb(input: {
   name: string;
   template: "empty" | "sample";
+  industry?: string;
+  taxId?: string;
 }): Promise<string> {
   await ensureCacheInitialized();
   const db = await getDb();
@@ -222,6 +224,21 @@ export async function createOrganizationInDb(input: {
     input.template === "sample"
       ? createInitialSeedData(cleanName)
       : createFreshCompanyData(cleanName);
+
+  if (input.industry || input.taxId) {
+    initialData.auditLogs.unshift({
+      id: `aud-profile-${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      user: "Business Owner (Owner)",
+      action: "Company Profile Configured",
+      details: [
+        input.industry ? `Industry: ${input.industry}` : "",
+        input.taxId ? `Tax ID: ${input.taxId}` : "",
+      ]
+        .filter(Boolean)
+        .join(" · "),
+    });
+  }
 
   const [newOrg] = await db
     .insert(organizations)

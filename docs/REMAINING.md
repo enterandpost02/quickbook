@@ -11,6 +11,9 @@
 - [x] Extend `src/db/schema.ts` and `drizzle/` migrations to persist ledger tables (`accounts`, `journal_entries`, `journal_lines`, `bank_transactions`, `organization_ledger_state`) in PostgreSQL.
 - [x] Add automatic storage adapter (`src/lib/qbo-db.ts`) that uses cloud PostgreSQL when `DATABASE_URL` is configured in `.env.local` or embedded PGlite PostgreSQL in `.local-db` automatically.
 - [x] Connect live **Supabase PostgreSQL** `DATABASE_URL` in `.env.local` and run `npm run db:migrate` to create and seed all tables in the cloud database.
+- [x] **Production Data Reset & Clean Books Tooling:** One-click sample data wiper in sidebar and security views allowing instant clearing of static transactions for live production books.
+- [x] **New Company Modal UI & Business Metadata:** Industry selector, Tax ID / EIN, and default $0.00 Fresh Company option.
+- [x] **Next.js 16 Production Build Verification for Vercel:** Zero build or prerender errors on Turbopack build.
 
 ### B. Advanced Reporting & Accounting Enhancements
 - [x] **Date-Range & Cash vs. Accrual Basis Filtering:** Filter Profit & Loss, Balance Sheet, Trial Balance, A/R & A/P Aging, and General Ledger reports by custom start/end dates and toggle between Accrual Basis and Cash Basis with exact integer-cent balance invariants.

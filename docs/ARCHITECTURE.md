@@ -23,6 +23,7 @@ flowchart TB
         RBAC["Role Guard (assertCanWrite) & Period Lock Guard (lockedThroughDate)"]
         PostEntry["postJournalEntry() — Validates Integer Cents & SUM(Debits) === SUM(Credits)"]
         Reversal["reverseJournalEntry() — Immutable Correction via Reversing Entry"]
+        Wipe["wipeAllCompanyTransactions() — Resets to Clean $0.00 Books"]
         AICat["AI Auto-Categorizer & Rule Matcher"]
         Aggregator["getComputedQboState() — Live COA Balances, P&L, Balance Sheet, Trial Balance, A/R & A/P Aging, General Ledger"]
     end
