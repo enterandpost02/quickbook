@@ -141,3 +141,14 @@
 - **Verified Production Build & Tests:**
   - 20/20 automated tests passing (`npm test`).
   - Next.js 16 production build succeeded across all 9 routes (`/`, `/_not-found`, `/api/auth/logout`, `/api/qbo`, `/dashboard`, `/login`, `/signup`).
+
+## Phase 15 — Role Switch Bug Fix & Dynamic Team Member Visibility
+- **Fixed Role Switching Error:**
+  - Updated [`src/app/api/qbo/route.ts`](../src/app/api/qbo/route.ts) to handle both `switch_role` and `set_active_role` actions, resolving the 400 "Unknown action" error when switching active user role.
+- **Dynamic Team Member Visibility (No Ghost Users):**
+  - Updated [`src/components/qbo/qbo-workspace.tsx`](../src/components/qbo/qbo-workspace.tsx) and [`src/components/qbo/qbo-views.tsx`](../src/components/qbo/qbo-views.tsx): Roles with no invited user are completely omitted from the user menu and role switchers.
+  - If a company only has 1 user (the Owner), it shows that 1 user cleanly without displaying non-existent Staff or Accountant options.
+  - When real employees are invited in Team Settings, they appear with their actual name, email, and assigned role.
+- **Owner Sanitization & Clean Books Reset:**
+  - Executed [`scripts/sanitize-db-team.ts`](../scripts/sanitize-db-team.ts) and added runtime sanitization in [`src/lib/qbo-db.ts`](../src/lib/qbo-db.ts) to replace old demo owner names with `Enter & Post Admin` (`enterandpost02@gmail.com`).
+  - Updated `wipeAllCompanyTransactions()` in [`src/lib/qbo-store.ts`](../src/lib/qbo-store.ts) to reset team members strictly to the active Owner (`Enter & Post Admin`), removing demo team members when wiping books for live use.

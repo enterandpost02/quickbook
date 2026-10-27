@@ -1609,6 +1609,18 @@ export function wipeAllCompanyTransactions(): QboStoreData {
       acc.bankBalanceCents = 0;
     }
   }
+  // Reset team members to only the active Company Owner for fresh production books
+  const ownerMember = store.teamMembers.find((m) => m.role === "owner");
+  store.teamMembers = [
+    {
+      id: ownerMember?.id || "tm-1",
+      name: ownerMember?.name === "Craig Carlson" ? "Enter & Post Admin" : (ownerMember?.name || "Enter & Post Admin"),
+      email: "enterandpost02@gmail.com",
+      role: "owner",
+      status: "Active",
+    },
+  ];
+  store.activeRole = "owner";
   appendAuditLog(
     "All Transactions Wiped",
     "Cleared all sample invoices, bills, journal entries, and bank transactions. Books reset to clean $0.00 balances for live production use."

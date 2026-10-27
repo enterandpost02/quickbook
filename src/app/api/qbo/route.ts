@@ -68,15 +68,16 @@ export async function POST(request: Request) {
 
     // Verify authenticated user authorization (RBAC)
     const auth = await getCurrentAuth();
+    const isRoleSwitchAction = action === "set_active_role" || action === "switch_role";
     if (auth) {
       if (auth.role === "accountant") {
-        if (action === "set_active_role" && payload?.role !== "accountant") {
+        if (isRoleSwitchAction && payload?.role !== "accountant") {
           return NextResponse.json(
             { error: "Forbidden: Accountants cannot elevate their role to owner or staff." },
             { status: 403 }
           );
         }
-        if (action !== "set_active_role") {
+        if (!isRoleSwitchAction) {
           return NextResponse.json(
             { error: "Forbidden: Accountant role is strictly read-only and cannot mutate company records." },
             { status: 403 }
@@ -185,6 +186,7 @@ export async function POST(request: Request) {
         runAiAutoCategorizer();
         break;
       }
+      case "switch_role":
       case "set_active_role": {
         setActiveRole(payload.role);
         break;

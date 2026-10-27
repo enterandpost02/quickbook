@@ -138,7 +138,19 @@ async function ensureCacheInitialized(): Promise<void> {
 
       for (const snap of allSnapshots) {
         if (snap.stateJson) {
-          ledgersMap.set(snap.organizationId, snap.stateJson);
+          const ledger = snap.stateJson;
+          if (ledger.teamMembers) {
+            for (const member of ledger.teamMembers) {
+              if (
+                member.role === "owner" &&
+                (member.name === "Craig Carlson" || member.email.includes("craig"))
+              ) {
+                member.name = "Enter & Post Admin";
+                member.email = "enterandpost02@gmail.com";
+              }
+            }
+          }
+          ledgersMap.set(snap.organizationId, ledger);
         }
       }
 

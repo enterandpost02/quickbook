@@ -614,8 +614,9 @@ export function QboWorkspace({
                 <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#0077C5] text-white text-xs font-bold">
                   {(
                     currentUser?.fullName ||
-                    state.teamMembers.find((m) => m.role === state.activeRole)
-                      ?.name ||
+                    (state.teamMembers.find((m) => m.role === state.activeRole)?.name === "Craig Carlson"
+                      ? "Enter & Post Admin"
+                      : state.teamMembers.find((m) => m.role === state.activeRole)?.name) ||
                     "Enter & Post Admin"
                   )
                     .split(" ")
@@ -625,110 +626,129 @@ export function QboWorkspace({
                 </div>
                 <span className="hidden lg:inline text-xs font-semibold text-slate-700">
                   {currentUser?.fullName ||
-                    state.teamMembers.find((m) => m.role === state.activeRole)
-                      ?.name ||
+                    (state.teamMembers.find((m) => m.role === state.activeRole)?.name === "Craig Carlson"
+                      ? "Enter & Post Admin"
+                      : state.teamMembers.find((m) => m.role === state.activeRole)?.name) ||
                     "Enter & Post Admin"}
                 </span>
                 <ChevronDown className="h-3 w-3 text-slate-400" />
               </button>
 
-              {showUserMenu && (
-                <div className="absolute right-0 mt-2 w-72 rounded-xl border border-slate-200 bg-white shadow-xl z-50 overflow-hidden">
-                  <div className="p-3.5 bg-[#1E252B] text-white">
-                    <p className="text-xs font-bold">
-                      {currentUser?.fullName ||
-                        state.teamMembers.find(
-                          (m) => m.role === state.activeRole
-                        )?.name ||
-                        "Enter & Post Admin"}
-                    </p>
-                    <p className="text-[11px] text-slate-300 truncate font-mono">
-                      {currentUser?.email ||
-                        state.teamMembers.find(
-                          (m) => m.role === state.activeRole
-                        )?.email ||
-                        "enterandpost02@gmail.com"}
-                    </p>
-                    <div className="mt-2 flex items-center gap-1.5">
-                      <span className="rounded bg-[#2CA01C] px-2 py-0.5 text-[10px] font-bold uppercase text-white">
-                        {state.activeRole === "accountant"
-                          ? "Accountant (Read-Only)"
-                          : state.activeRole}
-                      </span>
-                      <span className="text-[10px] text-slate-300 truncate">
-                        · {state.companyName}
-                      </span>
+              {showUserMenu && (() => {
+                const sanitizedMembers = (state.teamMembers || []).map((m) => {
+                  if (m.role === "owner" && (m.name === "Craig Carlson" || m.email.includes("craig"))) {
+                    return { ...m, name: "Enter & Post Admin", email: "enterandpost02@gmail.com" };
+                  }
+                  return m;
+                });
+                const activeMember = sanitizedMembers.find((m) => m.role === state.activeRole) || sanitizedMembers[0];
+                const displayName = currentUser?.fullName || activeMember?.name || "Enter & Post Admin";
+                const displayEmail = currentUser?.email || activeMember?.email || "enterandpost02@gmail.com";
+
+                return (
+                  <div className="absolute right-0 mt-2 w-72 rounded-xl border border-slate-200 bg-white shadow-xl z-50 overflow-hidden">
+                    <div className="p-3.5 bg-[#1E252B] text-white">
+                      <p className="text-xs font-bold">{displayName}</p>
+                      <p className="text-[11px] text-slate-300 truncate font-mono">{displayEmail}</p>
+                      <div className="mt-2 flex items-center gap-1.5">
+                        <span className="rounded bg-[#2CA01C] px-2 py-0.5 text-[10px] font-bold uppercase text-white">
+                          {state.activeRole === "accountant"
+                            ? "Accountant (Read-Only)"
+                            : state.activeRole === "staff"
+                            ? "Staff Bookkeeper"
+                            : "Company Owner"}
+                        </span>
+                        <span className="text-[10px] text-slate-300 truncate">
+                          · {state.companyName}
+                        </span>
+                      </div>
+                    </div>
+
+                    {sanitizedMembers.length > 1 ? (
+                      <div className="p-2 border-b border-slate-100">
+                        <p className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                          Switch Active User ({sanitizedMembers.length})
+                        </p>
+                        {sanitizedMembers.map((m) => {
+                          const isSelected = state.activeRole === m.role;
+                          return (
+                            <button
+                              key={m.id}
+                              onClick={async () => {
+                                setShowUserMenu(false);
+                                await runAction(
+                                  "switch_role",
+                                  { role: m.role },
+                                  `Switched session to ${m.name} (${m.role.toUpperCase()})`
+                                );
+                              }}
+                              className={`w-full flex items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-xs font-medium transition-colors ${
+                                isSelected
+                                  ? "bg-emerald-50 text-[#2CA01C] font-bold"
+                                  : "text-slate-700 hover:bg-slate-50"
+                              }`}
+                            >
+                              <div className="flex flex-col">
+                                <span className="font-semibold text-slate-900">
+                                  {m.role === "accountant"
+                                    ? "Accountant (Read-Only)"
+                                    : m.role === "staff"
+                                    ? "Staff Bookkeeper"
+                                    : "Owner"}{" "}
+                                  ({m.name})
+                                </span>
+                                <span className="text-[10px] text-slate-400 font-mono">
+                                  {m.email}
+                                </span>
+                              </div>
+                              {isSelected && (
+                                <Check className="h-3.5 w-3.5 text-[#2CA01C] shrink-0" />
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="p-2.5 border-b border-slate-100 bg-slate-50/50">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-bold text-slate-700">Team Role:</span>
+                          <span className="text-[10px] font-bold text-[#2CA01C] bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                            Owner (Active)
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-slate-400 mt-1">
+                          No other employees in this organization. Invite staff or accountants in <strong>Team Settings</strong>.
+                        </p>
+                      </div>
+                    )}
+
+                    <div className="p-2 bg-slate-50 flex flex-col gap-1">
+                      <a
+                        href="/login"
+                        className="w-full rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-200/70 text-left"
+                      >
+                        Sign in as another user (/login)
+                      </a>
+                      <a
+                        href="/signup"
+                        className="w-full rounded-lg px-2.5 py-1.5 text-xs font-semibold text-[#0077C5] hover:bg-sky-50 text-left"
+                      >
+                        + Register new user &amp; company (/signup)
+                      </a>
+
+                      <div className="my-1 border-t border-slate-200" />
+
+                      <button
+                        onClick={() => handleLogout()}
+                        className="w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-bold text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors text-left border border-red-200/60 bg-red-50/30"
+                      >
+                        <LogOut className="h-3.5 w-3.5 text-red-600" />
+                        Sign Out / Log Out
+                      </button>
                     </div>
                   </div>
-
-                  <div className="p-2 border-b border-slate-100">
-                    <p className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                      Active User Role (RBAC)
-                    </p>
-                    {(["owner", "staff", "accountant"] as const).map(
-                      (r) => (
-                        <button
-                          key={r}
-                          onClick={async () => {
-                            setShowUserMenu(false);
-                            await runAction(
-                              "switch_role",
-                              { role: r },
-                              r === "accountant"
-                                ? "Switched to Accountant (Read-Only) mode — mutations blocked"
-                                : `Switched session role to ${r.toUpperCase()}`
-                            );
-                          }}
-                          className={`w-full flex items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-xs font-medium ${
-                            state.activeRole === r
-                              ? "bg-emerald-50 text-[#2CA01C] font-bold"
-                              : "text-slate-700 hover:bg-slate-50"
-                          }`}
-                        >
-                          <span className="capitalize">
-                            {r === "accountant"
-                              ? "Accountant (Read-Only)"
-                              : r === "staff"
-                              ? "Staff Bookkeeper"
-                              : "Owner"} (
-                            {state.teamMembers.find((m) => m.role === r)
-                              ?.name ?? r}
-                            )
-                          </span>
-                          {state.activeRole === r && (
-                            <Check className="h-3.5 w-3.5 text-[#2CA01C]" />
-                          )}
-                        </button>
-                      )
-                    )}
-                  </div>
-
-                  <div className="p-2 bg-slate-50 flex flex-col gap-1">
-                    <a
-                      href="/login"
-                      className="w-full rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-200/70 text-left"
-                    >
-                      Sign in as another user (/login)
-                    </a>
-                    <a
-                      href="/signup"
-                      className="w-full rounded-lg px-2.5 py-1.5 text-xs font-semibold text-[#0077C5] hover:bg-sky-50 text-left"
-                    >
-                      + Register new user &amp; company (/signup)
-                    </a>
-
-                    <div className="my-1 border-t border-slate-200" />
-
-                    <button
-                      onClick={() => handleLogout()}
-                      className="w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-bold text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors text-left border border-red-200/60 bg-red-50/30"
-                    >
-                      <LogOut className="h-3.5 w-3.5 text-red-600" />
-                      Sign Out / Log Out
-                    </button>
-                  </div>
-                </div>
-              )}
+                );
+              })()}
             </div>
           </div>
         </header>

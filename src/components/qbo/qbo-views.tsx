@@ -3896,32 +3896,34 @@ export function AuditLogView({ state, runAction }: ViewProps) {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-slate-600">
-            Active Role:
-          </span>
-          {(["owner", "staff", "accountant"] as const).map((r) => (
-            <button
-              key={r}
-              onClick={() =>
-                runAction(
-                  "set_active_role",
-                  { role: r },
-                  r === "accountant"
-                    ? "Switched to Accountant (Read-Only) mode — mutations are now blocked!"
-                    : `Switched to ${r.toUpperCase()} role`
-                )
-              }
-              className={`rounded-full px-3 py-1 text-xs font-bold capitalize transition-colors ${
-                state.activeRole === r
-                  ? "bg-[#2CA01C] text-white"
-                  : "bg-white border border-slate-300 text-slate-700 hover:bg-slate-50"
-              }`}
-            >
-              {r === "accountant" ? "Accountant (Read-Only)" : r}
-            </button>
-          ))}
-        </div>
+        {state.teamMembers && state.teamMembers.length > 1 && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-slate-600">
+              Active Role:
+            </span>
+            {Array.from(new Set(state.teamMembers.map((m) => m.role))).map((r) => (
+              <button
+                key={r}
+                onClick={() =>
+                  runAction(
+                    "set_active_role",
+                    { role: r },
+                    r === "accountant"
+                      ? "Switched to Accountant (Read-Only) mode — mutations are now blocked!"
+                      : `Switched to ${r.toUpperCase()} role`
+                  )
+                }
+                className={`rounded-full px-3 py-1 text-xs font-bold capitalize transition-colors ${
+                  state.activeRole === r
+                    ? "bg-[#2CA01C] text-white"
+                    : "bg-white border border-slate-300 text-slate-700 hover:bg-slate-50"
+                }`}
+              >
+                {r === "accountant" ? "Accountant (Read-Only)" : r}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Sub-navigation */}
