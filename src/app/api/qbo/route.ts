@@ -27,7 +27,7 @@ import {
 import {
   createOrganizationInDb,
   loadQboStoreFromDb,
-  persistQboStoreToDb,
+  saveQboStoreFast,
   setActiveOrgCookieSafe,
 } from "@/lib/qbo-db";
 
@@ -96,8 +96,7 @@ export async function POST(request: Request) {
       }
       case "import_csv": {
         const result = importBankCsvRows(payload);
-        await persistQboStoreToDb(organizationId);
-        const { state } = await loadQboStoreFromDb(organizationId);
+        const state = saveQboStoreFast(organizationId);
         return NextResponse.json({ ...state, importResult: result });
       }
       case "create_invoice": {
@@ -171,8 +170,7 @@ export async function POST(request: Request) {
         );
     }
 
-    await persistQboStoreToDb(organizationId);
-    const { state } = await loadQboStoreFromDb(organizationId);
+    const state = saveQboStoreFast(organizationId);
     return NextResponse.json(state);
   } catch (err) {
     const message =

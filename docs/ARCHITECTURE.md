@@ -27,9 +27,9 @@ flowchart TB
         Aggregator["getComputedQboState() — Live COA Balances, P&L, Balance Sheet, Trial Balance, A/R & A/P Aging, General Ledger"]
     end
 
-    subgraph Storage["Persistence Layer"]
-        InMemory["Static / In-Memory Store (Active Now — Pre-seeded Sample Company)"]
-        Postgres["PostgreSQL + Drizzle ORM Schema (src/db/schema.ts — Multi-tenant organization_id)"]
+    subgraph Storage["Persistence Layer (Read-Through + Write-Behind Cache)"]
+        InMemory["Multi-Company In-Memory Cache (< 2ms reads & instant UI mutations)"]
+        Postgres["Supabase PostgreSQL + Drizzle ORM (Background Write-Behind Sync via Promise.all)"]
     end
 
     Workspace --> Views
