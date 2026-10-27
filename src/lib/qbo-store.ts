@@ -254,7 +254,7 @@ function makeFingerprint(
     .toUpperCase()}|${amountCents}`;
 }
 
-function createInitialSeedData(): QboStoreData {
+export function createInitialSeedData(customCompanyName?: string): QboStoreData {
   const accounts: QboAccount[] = [
     // Banking
     {
@@ -1482,7 +1482,8 @@ function createInitialSeedData(): QboStoreData {
   ];
 
   return {
-    companyName: "Craig's Design and Landscaping Services",
+    companyName:
+      customCompanyName?.trim() || "Craig's Design and Landscaping Services",
     lockedThroughDate: "2026-08-31",
     activeRole: "owner",
     salesTaxRatePercent: 8.25,
@@ -1499,6 +1500,48 @@ function createInitialSeedData(): QboStoreData {
     expenses,
     reconciliations,
     auditLogs,
+  };
+}
+
+export function createFreshCompanyData(companyName: string): QboStoreData {
+  const base = createInitialSeedData(companyName);
+  return {
+    companyName: companyName.trim() || "New Business LLC",
+    lockedThroughDate: null,
+    activeRole: "owner",
+    salesTaxRatePercent: 8.25,
+    teamMembers: [
+      {
+        id: "tm-1",
+        name: "Business Owner",
+        email: "owner@company.com",
+        role: "owner",
+        status: "Active",
+      },
+    ],
+    accounts: base.accounts.map((a) => ({
+      ...a,
+      bankBalanceCents: a.bankBalanceCents !== undefined ? 0 : undefined,
+    })),
+    journalEntries: [],
+    bankTransactions: [],
+    rules: base.rules,
+    customers: [],
+    vendors: [],
+    productsAndServices: base.productsAndServices,
+    estimates: [],
+    invoices: [],
+    expenses: [],
+    reconciliations: [],
+    auditLogs: [
+      {
+        id: `aud-init-${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        user: "Business Owner (Owner)",
+        action: "Company Created",
+        details: `Initialized 31 Chart of Accounts for ${companyName.trim()}`,
+      },
+    ],
   };
 }
 
@@ -1579,6 +1622,8 @@ export interface AgingRow {
 }
 
 export interface ComputedQboState extends QboStoreData {
+  activeOrganizationId?: string;
+  organizations?: Array<{ id: string; name: string; slug: string }>;
   accountsWithBalances: ComputedAccount[];
   sampleCsvText: string;
   reports: {

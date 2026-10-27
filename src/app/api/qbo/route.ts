@@ -24,7 +24,12 @@ import {
   setActiveRole,
   setPeriodLockDate,
 } from "@/lib/qbo-store";
-import { loadQboStoreFromDb, persistQboStoreToDb } from "@/lib/qbo-db";
+import {
+  createOrganizationInDb,
+  loadQboStoreFromDb,
+  persistQboStoreToDb,
+  setActiveOrgCookieSafe,
+} from "@/lib/qbo-db";
 
 export async function GET() {
   const { state } = await loadQboStoreFromDb();
@@ -33,9 +38,25 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const { organizationId } = await loadQboStoreFromDb();
     const body = await request.json();
     const { action, payload } = body;
+
+    if (action === "switch_organization") {
+      await setActiveOrgCookieSafe(payload.organizationId);
+      const { state } = await loadQboStoreFromDb(payload.organizationId);
+      return NextResponse.json(state);
+    }
+
+    if (action === "create_organization") {
+      const newOrgId = await createOrganizationInDb({
+        name: payload.name,
+        template: payload.template ?? "empty",
+      });
+      const { state } = await loadQboStoreFromDb(newOrgId);
+      return NextResponse.json(state);
+    }
+
+    const { organizationId } = await loadQboStoreFromDb();
 
     switch (action) {
       case "post_journal_entry": {
@@ -76,7 +97,7 @@ export async function POST(request: Request) {
       case "import_csv": {
         const result = importBankCsvRows(payload);
         await persistQboStoreToDb(organizationId);
-        const state = getComputedQboState();
+        const { state } = await loadQboStoreFromDb(organizationId);
         return NextResponse.json({ ...state, importResult: result });
       }
       case "create_invoice": {
@@ -151,7 +172,7 @@ export async function POST(request: Request) {
     }
 
     await persistQboStoreToDb(organizationId);
-    const state = getComputedQboState();
+    const { state } = await loadQboStoreFromDb(organizationId);
     return NextResponse.json(state);
   } catch (err) {
     const message =

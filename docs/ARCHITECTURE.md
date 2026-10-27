@@ -9,9 +9,9 @@ The application combines a **QuickBooks Online (QBO) Business Workflow UI** with
 ```mermaid
 flowchart TB
     subgraph Client["Next.js 16 Client UI (QuickBooks Online Clone)"]
-        Workspace["QboWorkspace (Left Dark Rail #1E252B + Top App Bar)"]
+        Workspace["QboWorkspace (Left Dark Rail #1E252B + Multi-Company Switcher Top Bar)"]
         Views["9 QBO Views (Dashboard, Banking, Sales, Expenses, COA, Journals, Reports, Reconcile, Audit/Security)"]
-        Modals["Quick Create (+ New) & Transaction Modals (CSV Upload, Invoice, Estimate, Expense/Bill, Transfer, Journal Entry)"]
+        Modals["Quick Create (+ New), New Company Modal & Transaction Modals"]
     end
 
     subgraph API["Next.js App Router Backend (/api/qbo)"]

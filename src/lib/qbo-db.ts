@@ -1,4 +1,5 @@
-import { eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
+import { cookies } from "next/headers";
 import { getDb } from "@/db";
 import {
   accounts,
@@ -9,6 +10,8 @@ import {
   organizations,
 } from "@/db/schema";
 import {
+  createFreshCompanyData,
+  createInitialSeedData,
   getComputedQboState,
   getRawStore,
   hydrateQboStore,
@@ -18,12 +21,43 @@ import {
 } from "@/lib/qbo-store";
 
 const DEFAULT_ORG_SLUG = "craigs-design-and-landscaping";
+export const ACTIVE_ORG_COOKIE = "qbo_active_org_id";
+
+function slugifyCompanyName(name: string): string {
+  const base = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+  return `${base || "company"}-${Date.now().toString().slice(-5)}`;
+}
+
+async function getActiveOrgCookieSafe(): Promise<string | undefined> {
+  try {
+    const store = await cookies();
+    return store.get(ACTIVE_ORG_COOKIE)?.value;
+  } catch {
+    return undefined;
+  }
+}
+
+export async function setActiveOrgCookieSafe(orgId: string): Promise<void> {
+  try {
+    const store = await cookies();
+    store.set(ACTIVE_ORG_COOKIE, orgId, {
+      httpOnly: false,
+      path: "/",
+      maxAge: 60 * 60 * 24 * 365,
+    });
+  } catch {
+    // Ignore when called outside a Next.js request context (e.g. CLI scripts)
+  }
+}
 
 /**
- * Ensures the default organization and its QuickBooks ledger exist in PostgreSQL,
- * hydrates the in-memory engine from PostgreSQL, and returns the organization ID.
+ * Ensures at least the default organization exists in PostgreSQL, loads the active
+ * organization's QuickBooks ledger, and returns all organizations for the company switcher.
  */
-export async function loadQboStoreFromDb(): Promise<{
+export async function loadQboStoreFromDb(requestedOrgId?: string): Promise<{
   organizationId: string;
   state: ComputedQboState;
   storageMode: "cloud-postgres" | "local-pglite";
@@ -33,15 +67,14 @@ export async function loadQboStoreFromDb(): Promise<{
     ? "cloud-postgres"
     : "local-pglite";
 
-  let [org] = await db
+  let allOrgs = await db
     .select()
     .from(organizations)
-    .where(eq(organizations.slug, DEFAULT_ORG_SLUG))
-    .limit(1);
+    .orderBy(asc(organizations.createdAt));
 
-  if (!org) {
-    const seed = getRawStore();
-    [org] = await db
+  if (allOrgs.length === 0) {
+    const seed = createInitialSeedData();
+    const [createdDefault] = await db
       .insert(organizations)
       .values({
         name: seed.companyName,
@@ -51,50 +84,99 @@ export async function loadQboStoreFromDb(): Promise<{
         lockedThroughDate: seed.lockedThroughDate,
       })
       .returning();
+    await persistQboStoreToDb(createdDefault.id, seed);
+    allOrgs = [createdDefault];
   }
+
+  const cookieOrgId = await getActiveOrgCookieSafe();
+  const targetOrgId = requestedOrgId || cookieOrgId;
+  const activeOrg =
+    allOrgs.find((o) => o.id === targetOrgId) ?? allOrgs[0];
 
   const [existingLedger] = await db
     .select()
     .from(organizationLedgerState)
-    .where(eq(organizationLedgerState.organizationId, org.id))
+    .where(eq(organizationLedgerState.organizationId, activeOrg.id))
     .limit(1);
 
   if (existingLedger?.stateJson) {
-    hydrateQboStore(existingLedger.stateJson);
+    hydrateQboStore({
+      ...existingLedger.stateJson,
+      companyName: activeOrg.name,
+    });
   } else {
-    const seed = resetQboStore();
-    await persistQboStoreToDb(org.id, seed);
+    const seed =
+      activeOrg.slug === DEFAULT_ORG_SLUG
+        ? resetQboStore()
+        : createFreshCompanyData(activeOrg.name);
+    hydrateQboStore(seed);
+    await persistQboStoreToDb(activeOrg.id, seed);
   }
 
+  const computed = getComputedQboState();
   return {
-    organizationId: org.id,
-    state: getComputedQboState(),
+    organizationId: activeOrg.id,
+    state: {
+      ...computed,
+      activeOrganizationId: activeOrg.id,
+      organizations: allOrgs.map((o) => ({
+        id: o.id,
+        name: o.name,
+        slug: o.slug,
+      })),
+    },
     storageMode,
   };
 }
 
 /**
+ * Creates a brand-new isolated company (organization) in PostgreSQL and switches to it.
+ */
+export async function createOrganizationInDb(input: {
+  name: string;
+  template: "empty" | "sample";
+}): Promise<string> {
+  const db = await getDb();
+  const cleanName = input.name.trim() || "New Business LLC";
+  const slug = slugifyCompanyName(cleanName);
+
+  const initialData =
+    input.template === "sample"
+      ? createInitialSeedData(cleanName)
+      : createFreshCompanyData(cleanName);
+
+  const [newOrg] = await db
+    .insert(organizations)
+    .values({
+      name: cleanName,
+      slug,
+      baseCurrency: "USD",
+      fiscalYearStartMonth: 1,
+      lockedThroughDate: initialData.lockedThroughDate,
+    })
+    .returning();
+
+  hydrateQboStore(initialData);
+  await persistQboStoreToDb(newOrg.id, initialData);
+  await setActiveOrgCookieSafe(newOrg.id);
+
+  return newOrg.id;
+}
+
+/**
  * Persists the current QuickBooks store into PostgreSQL tables (`accounts`,
  * `journal_entries`, `journal_lines`, `bank_transactions`, and `organization_ledger_state`)
- * inside a database transaction scoped by `organization_id`.
+ * scoped by `organization_id` with tenant-prefixed relational IDs so multiple
+ * companies never collide on primary keys.
  */
 export async function persistQboStoreToDb(
-  organizationId?: string,
+  organizationId: string,
   customData?: QboStoreData
 ): Promise<void> {
   const db = await getDb();
   const data = customData ?? getRawStore();
-
-  let orgId = organizationId;
-  if (!orgId) {
-    const [org] = await db
-      .select()
-      .from(organizations)
-      .where(eq(organizations.slug, DEFAULT_ORG_SLUG))
-      .limit(1);
-    if (!org) return;
-    orgId = org.id;
-  }
+  const orgId = organizationId;
+  const pk = (rawId: string) => `${orgId}:${rawId}`;
 
   // Upsert organization ledger snapshot
   const [existing] = await db
@@ -134,7 +216,7 @@ export async function persistQboStoreToDb(
   if (data.accounts.length > 0) {
     await db.insert(accounts).values(
       data.accounts.map((a) => ({
-        id: a.id,
+        id: pk(a.id),
         organizationId: orgId,
         code: a.code,
         name: a.name,
@@ -150,7 +232,7 @@ export async function persistQboStoreToDb(
   if (data.journalEntries.length > 0) {
     await db.insert(journalEntries).values(
       data.journalEntries.map((je) => ({
-        id: je.id,
+        id: pk(je.id),
         organizationId: orgId,
         entryNumber: je.entryNumber,
         date: je.date,
@@ -165,10 +247,10 @@ export async function persistQboStoreToDb(
 
     const allLines = data.journalEntries.flatMap((je) =>
       je.lines.map((l) => ({
-        id: l.id,
+        id: pk(l.id),
         organizationId: orgId,
-        journalEntryId: je.id,
-        accountId: l.accountId,
+        journalEntryId: pk(je.id),
+        accountId: pk(l.accountId),
         accountCode: l.accountCode,
         accountName: l.accountName,
         description: l.description,
@@ -186,9 +268,9 @@ export async function persistQboStoreToDb(
   if (data.bankTransactions.length > 0) {
     await db.insert(bankTransactions).values(
       data.bankTransactions.map((tx) => ({
-        id: tx.id,
+        id: pk(tx.id),
         organizationId: orgId,
-        bankAccountId: tx.bankAccountId,
+        bankAccountId: pk(tx.bankAccountId),
         date: tx.date,
         description: tx.description,
         payee: tx.payee ?? null,

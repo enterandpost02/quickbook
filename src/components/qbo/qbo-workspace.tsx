@@ -3,7 +3,10 @@
 import React, { useState } from "react";
 import {
   BookOpenCheck,
+  Building2,
+  Check,
   CheckCircle2,
+  ChevronDown,
   FileSpreadsheet,
   FileText,
   History,
@@ -42,6 +45,12 @@ export function QboWorkspace({
   const [activeTab, setActiveTab] = useState<QboNavTab>("home");
   const [activeModal, setActiveModal] = useState<ActiveModalType>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showOrgDropdown, setShowOrgDropdown] = useState(false);
+  const [showNewCompanyModal, setShowNewCompanyModal] = useState(false);
+  const [newCompanyName, setNewCompanyName] = useState("");
+  const [newCompanyTemplate, setNewCompanyTemplate] = useState<
+    "empty" | "sample"
+  >("empty");
   const [toast, setToast] = useState<{
     type: "success" | "error";
     message: string;
@@ -210,13 +219,97 @@ export function QboWorkspace({
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top White QBO App Bar */}
         <header className="h-14 bg-white border-b border-slate-200 px-6 flex items-center justify-between sticky top-0 z-30">
-          <div className="flex items-center gap-3">
-            <span className="font-bold text-sm text-slate-800">
-              {state.companyName}
-            </span>
-            <span className="hidden sm:inline-flex items-center rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 text-[11px] font-semibold text-[#2CA01C]">
-              Sample Company · Integer Cents
-            </span>
+          <div className="flex items-center gap-3 relative">
+            {/* Multi-Company Switcher Dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => setShowOrgDropdown((v) => !v)}
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50/80 hover:bg-slate-100 px-3 py-1.5 text-sm font-bold text-slate-800 transition-colors"
+              >
+                <Building2 className="h-4 w-4 text-[#2CA01C]" />
+                <span>{state.companyName}</span>
+                <ChevronDown className="h-3.5 w-3.5 text-slate-500" />
+              </button>
+
+              {showOrgDropdown && (
+                <div className="absolute left-0 mt-2 w-80 rounded-xl border border-slate-200 bg-white shadow-xl z-50 overflow-hidden">
+                  <div className="px-3.5 py-2.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                      Switch Company ({state.organizations?.length ?? 1})
+                    </span>
+                    <span className="text-[10px] font-semibold text-[#2CA01C]">
+                      Supabase Multi-Tenant
+                    </span>
+                  </div>
+
+                  <div className="max-h-60 overflow-y-auto divide-y divide-slate-100">
+                    {(
+                      state.organizations ?? [
+                        {
+                          id: "default",
+                          name: state.companyName,
+                          slug: "default",
+                        },
+                      ]
+                    ).map((org) => {
+                      const isCurrent =
+                        org.id === state.activeOrganizationId ||
+                        org.name === state.companyName;
+                      return (
+                        <button
+                          key={org.id}
+                          onClick={async () => {
+                            setShowOrgDropdown(false);
+                            await runAction(
+                              "switch_organization",
+                              { organizationId: org.id },
+                              `Switched active company to ${org.name}`
+                            );
+                          }}
+                          className={`w-full flex items-center justify-between px-3.5 py-2.5 text-left text-xs transition-colors ${
+                            isCurrent
+                              ? "bg-emerald-50/80 font-bold text-[#2CA01C]"
+                              : "text-slate-700 hover:bg-slate-50 font-medium"
+                          }`}
+                        >
+                          <div className="truncate pr-2">
+                            <span className="block truncate">{org.name}</span>
+                            <span className="block text-[10px] text-slate-400 font-mono">
+                              ID: {org.id.slice(0, 8)}...
+                            </span>
+                          </div>
+                          {isCurrent && (
+                            <Check className="h-4 w-4 text-[#2CA01C] shrink-0" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="p-2 bg-slate-50 border-t border-slate-200">
+                    <button
+                      onClick={() => {
+                        setShowOrgDropdown(false);
+                        setShowNewCompanyModal(true);
+                      }}
+                      className="w-full flex items-center justify-center gap-1.5 rounded-lg bg-[#2CA01C] px-3 py-2 text-xs font-bold text-white hover:bg-[#248217]"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Create New Company
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={() => setShowNewCompanyModal(true)}
+              className="hidden sm:inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 text-[11px] font-semibold text-[#2CA01C] hover:bg-emerald-100"
+            >
+              <Plus className="h-3 w-3" />
+              New Company
+            </button>
+
             <button
               onClick={() => setActiveTab("audit")}
               className={`hidden md:inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-bold capitalize border ${
@@ -381,6 +474,133 @@ export function QboWorkspace({
         runAction={runAction}
         isSubmitting={isSubmitting}
       />
+
+      {/* Create New Company Modal */}
+      {showNewCompanyModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden">
+            <div className="px-6 py-4 bg-[#1E252B] text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Building2 className="h-5 w-5 text-[#2CA01C]" />
+                <h2 className="text-sm font-bold">
+                  Create New Company in Supabase
+                </h2>
+              </div>
+              <button
+                onClick={() => setShowNewCompanyModal(false)}
+                className="text-slate-400 hover:text-white text-xs font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!newCompanyName.trim()) return;
+                const createdName = newCompanyName.trim();
+                setShowNewCompanyModal(false);
+                setNewCompanyName("");
+                await runAction(
+                  "create_organization",
+                  {
+                    name: createdName,
+                    template: newCompanyTemplate,
+                  },
+                  `Created and switched to "${createdName}" in Supabase PostgreSQL!`
+                );
+              }}
+              className="p-6 space-y-4"
+            >
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-500 mb-1.5">
+                  Company / Legal Business Name
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newCompanyName}
+                  onChange={(e) => setNewCompanyName(e.target.value)}
+                  placeholder="e.g. Apex Software Solutions LLC"
+                  className="w-full rounded-lg border border-slate-300 px-3.5 py-2 text-sm focus:border-[#2CA01C] focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-500 mb-1.5">
+                  Initial Books Setup
+                </label>
+                <div className="space-y-2 text-xs">
+                  <label
+                    className={`flex items-start gap-2.5 rounded-xl border p-3 cursor-pointer ${
+                      newCompanyTemplate === "empty"
+                        ? "border-[#2CA01C] bg-emerald-50/60"
+                        : "border-slate-200 hover:bg-slate-50"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="companyTemplate"
+                      checked={newCompanyTemplate === "empty"}
+                      onChange={() => setNewCompanyTemplate("empty")}
+                      className="mt-0.5 accent-[#2CA01C]"
+                    />
+                    <div>
+                      <span className="font-bold text-slate-900 block">
+                        Fresh Company ($0.00 Balances)
+                      </span>
+                      <span className="text-slate-500">
+                        Starts with the 31 standard QuickBooks Chart of Accounts and 0 transactions—ready for your own manual entries and CSV uploads.
+                      </span>
+                    </div>
+                  </label>
+
+                  <label
+                    className={`flex items-start gap-2.5 rounded-xl border p-3 cursor-pointer ${
+                      newCompanyTemplate === "sample"
+                        ? "border-[#2CA01C] bg-emerald-50/60"
+                        : "border-slate-200 hover:bg-slate-50"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="companyTemplate"
+                      checked={newCompanyTemplate === "sample"}
+                      onChange={() => setNewCompanyTemplate("sample")}
+                      className="mt-0.5 accent-[#2CA01C]"
+                    />
+                    <div>
+                      <span className="font-bold text-slate-900 block">
+                        Pre-loaded Sample Data
+                      </span>
+                      <span className="text-slate-500">
+                        Pre-populates sample invoices, bills, journal entries, and uncategorized bank feed rows for testing.
+                      </span>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowNewCompanyModal(false)}
+                  className="rounded-full border border-slate-300 px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="rounded-full bg-[#2CA01C] px-5 py-2 text-xs font-bold text-white hover:bg-[#248217]"
+                >
+                  Create &amp; Switch Company
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
