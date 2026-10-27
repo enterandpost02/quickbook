@@ -24,14 +24,16 @@ import {
   setActiveRole,
   setPeriodLockDate,
 } from "@/lib/qbo-store";
+import { loadQboStoreFromDb, persistQboStoreToDb } from "@/lib/qbo-db";
 
 export async function GET() {
-  const state = getComputedQboState();
+  const { state } = await loadQboStoreFromDb();
   return NextResponse.json(state);
 }
 
 export async function POST(request: Request) {
   try {
+    const { organizationId } = await loadQboStoreFromDb();
     const body = await request.json();
     const { action, payload } = body;
 
@@ -73,6 +75,7 @@ export async function POST(request: Request) {
       }
       case "import_csv": {
         const result = importBankCsvRows(payload);
+        await persistQboStoreToDb(organizationId);
         const state = getComputedQboState();
         return NextResponse.json({ ...state, importResult: result });
       }
@@ -147,6 +150,7 @@ export async function POST(request: Request) {
         );
     }
 
+    await persistQboStoreToDb(organizationId);
     const state = getComputedQboState();
     return NextResponse.json(state);
   } catch (err) {

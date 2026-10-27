@@ -1515,6 +1515,10 @@ export function getRawStore(): QboStoreData {
   return globalStore.__qboStoreData;
 }
 
+export function hydrateQboStore(data: QboStoreData): void {
+  globalStore.__qboStoreData = data;
+}
+
 export function resetQboStore(): QboStoreData {
   globalStore.__qboStoreData = createInitialSeedData();
   return globalStore.__qboStoreData;

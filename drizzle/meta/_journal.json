@@ -8,6 +8,13 @@
       "when": 1793052609769,
       "tag": "0000_phase_0_init_auth_and_orgs",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1793111387879,
+      "tag": "0001_serious_misty_knight",
+      "breakpoints": true
     }
   ]
 }

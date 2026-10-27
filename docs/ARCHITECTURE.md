@@ -83,7 +83,8 @@ quickboooks/
 │       ├── auth.ts                # Cookie session management
 │       ├── csv-parser.ts          # Multi-bank CSV parser, column mapper & currency/date normalizer
 │       ├── money.ts               # Integer-cents conversion, formatting, and balance verification helpers
-│       ├── qbo-store.ts           # Static/In-Memory Double-Entry Accounting Engine & Sample Company Seed
+│       ├── qbo-db.ts              # PostgreSQL (Supabase/Neon + PGlite fallback) persistence adapter
+│       ├── qbo-store.ts           # Double-Entry Accounting Engine & Sample Company Seed
 │       └── sample-bank-csvs.ts    # 4 realistic bank CSV presets (Chase, BofA, Amex, Wells Fargo)
 ├── CLAUDE.md                      # AI assistant instructions & mandatory doc update rules
 ├── README-dev.md                  # Developer onboarding & core rules

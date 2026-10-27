@@ -8,9 +8,9 @@
 ## 2. Remaining Features for Production / Live Cloud Deployment
 
 ### A. Live PostgreSQL (Neon / Supabase) Persistence Layer
-- [ ] Connect `DATABASE_URL` to a live Neon or Supabase PostgreSQL instance and run Drizzle migrations.
-- [ ] Extend `src/db/schema.ts` and `drizzle/` migrations to persist all ledger tables (`accounts`, `journal_entries`, `journal_lines`, `bank_transactions`, `categorization_rules`, `customers`, `vendors`, `products_services`, `estimates`, `invoices`, `expenses`, `reconciliations`, `audit_logs`) in PostgreSQL alongside the static/in-memory store.
-- [ ] Add a storage adapter switch so the app can run seamlessly in either **Static/In-Memory Mode** (zero DB setup) or **PostgreSQL Production Mode**.
+- [x] Extend `src/db/schema.ts` and `drizzle/` migrations to persist ledger tables (`accounts`, `journal_entries`, `journal_lines`, `bank_transactions`, `organization_ledger_state`) in PostgreSQL.
+- [x] Add automatic storage adapter (`src/lib/qbo-db.ts`) that uses cloud PostgreSQL when `DATABASE_URL` is configured in `.env.local` or embedded PGlite PostgreSQL in `.local-db` automatically.
+- [ ] Add user's cloud **Supabase** or **Neon** `DATABASE_URL` in `.env.local` and run `npm run db:migrate` to push tables to the cloud database.
 
 ### B. Advanced Reporting & Accounting Enhancements
 - [ ] **Date-Range & Cash vs. Accrual Basis Filtering:** Filter Profit & Loss, Balance Sheet, and General Ledger reports by custom start/end dates and toggle between Accrual Basis and Cash Basis.

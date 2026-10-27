@@ -46,3 +46,8 @@
 - Built **AI Auto-Categorizer** (`runAiAutoCategorizer`) that populates suggested accounts, confidence scores (`AI 97%`), and human-readable reasoning on `"For review"` bank transactions.
 - Built 6-point **Security & Accounting Integrity Audit Scorecard** and one-click **Full Company Backup (`.JSON`)** export.
 - Added **10 automated unit & integration tests** (`src/lib/__tests__/qbo-engine.test.ts` via `npm test`) verifying balanced math, reversals, period locks, multi-bank CSV parsing, RBAC, and AI categorization.
+
+## Database Integration — PostgreSQL + Drizzle ORM Persistence
+- Extended [`src/db/schema.ts`](../src/db/schema.ts) with multi-tenant PostgreSQL ledger tables (`accounts`, `journal_entries`, `journal_lines`, `bank_transactions`, `organization_ledger_state`) scoped by `organization_id`.
+- Generated SQL migration [`drizzle/0001_serious_misty_knight.sql`](../drizzle/0001_serious_misty_knight.sql).
+- Created [`src/lib/qbo-db.ts`](../src/lib/qbo-db.ts) and wired `/dashboard` and `/api/qbo` to automatically load from and persist to PostgreSQL (supports cloud **Supabase / Neon** via `DATABASE_URL` in `.env.local`, with automatic embedded **PGlite** PostgreSQL fallback in `.local-db` when `DATABASE_URL` is not set).
