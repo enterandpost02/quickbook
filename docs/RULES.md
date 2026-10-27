@@ -20,6 +20,10 @@
 - **Rule 6 — Sales Tax & Bank Feed Matching Precision:**
   - Sales tax on invoices must be computed in integer cents (`Math.round((taxableSubtotalCents * taxRatePercent) / 100)`) and credited to `2200 Sales Tax Payable`.
   - Matching a bank feed deposit to an open Invoice (`sourceType: "invoice_payment"`) or a bank outflow to an open Vendor Bill (`sourceType: "bill_payment"`) must clear `1100 Accounts Receivable` or `2000 Accounts Payable` without double-counting revenue or expenses.
+- **Rule 7 — Sub-Ledger, Bank Feed & Reconciliation Exactness:**
+  - **Sub-Ledger vs. General Ledger:** Open Invoices (`arAging.totalCents` / `openInvoicesCents`) must always equal `1100 Accounts Receivable` GL balance, and Open Vendor Bills (`apAging.totalCents` / `openBillsCents`) must always equal `2000 Accounts Payable` GL balance, including after `reverseJournalEntry()` operations.
+  - **Bank Balance vs. QuickBooks Balance:** `bankBalanceCents` is dynamically computed from `balanceCents` plus pending `"for_review"` bank feed items (`+pending` for debit-normal Bank accounts, `-pending` for credit-normal Credit Card accounts) so `bankBalanceCents === balanceCents` whenever `forReviewCount === 0`.
+  - **Reconciliation Zero-Difference Guard:** `finishReconciliation()` enforces `clearedBalanceCents === endingBalanceCents` (`Difference === $0.00`) for both debit-normal Bank accounts and credit-normal Credit Card accounts.
 
 ## 2. Security & Multi-Tenancy Rules
 - **Organization Isolation (`organization_id`):**

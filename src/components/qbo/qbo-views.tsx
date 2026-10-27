@@ -2591,12 +2591,19 @@ export function ReconcileView({ state, runAction, isSubmitting }: ViewProps) {
     state.lockedThroughDate ?? "2026-09-30"
   );
 
-  // Find all journal entries that touch this bank account
+  // Find all journal entries that touch this bank or credit card account
+  const isCreditCard = currentBank?.normalBalance === "credit";
   const bankEntries = state.journalEntries
     .map((je) => {
-      const bankLine = je.lines.find((l) => l.accountId === bankAccountId);
-      if (!bankLine) return null;
-      const netCents = bankLine.debitCents - bankLine.creditCents;
+      const matchingLines = je.lines.filter(
+        (l) => l.accountId === bankAccountId
+      );
+      if (matchingLines.length === 0) return null;
+      const totalDebit = matchingLines.reduce((s, l) => s + l.debitCents, 0);
+      const totalCredit = matchingLines.reduce((s, l) => s + l.creditCents, 0);
+      const netCents = isCreditCard
+        ? totalCredit - totalDebit
+        : totalDebit - totalCredit;
       return {
         entryId: je.id,
         entryNumber: je.entryNumber,
@@ -2608,13 +2615,8 @@ export function ReconcileView({ state, runAction, isSubmitting }: ViewProps) {
     })
     .filter((x): x is NonNullable<typeof x> => x !== null);
 
-  const [checkedIds, setCheckedIds] = useState<Record<string, boolean>>(() => {
-    const map: Record<string, boolean> = {};
-    for (const e of bankEntries) {
-      map[e.entryId] = true;
-    }
-    return map;
-  });
+  // Default every entry to checked (true) unless explicitly unchecked (false)
+  const [checkedIds, setCheckedIds] = useState<Record<string, boolean>>({});
 
   let statementEndingCents = 0;
   try {
@@ -2624,7 +2626,8 @@ export function ReconcileView({ state, runAction, isSubmitting }: ViewProps) {
   }
 
   const clearedBalanceCents = bankEntries.reduce(
-    (sum, item) => (checkedIds[item.entryId] ? sum + item.netCents : sum),
+    (sum, item) =>
+      checkedIds[item.entryId] !== false ? sum + item.netCents : sum,
     0
   );
   const differenceCents = statementEndingCents - clearedBalanceCents;
@@ -2650,7 +2653,9 @@ export function ReconcileView({ state, runAction, isSubmitting }: ViewProps) {
                 bankAccountId,
                 statementDate,
                 endingBalanceCents: statementEndingCents,
-                entryIds: Object.keys(checkedIds).filter((k) => checkedIds[k]),
+                entryIds: bankEntries
+                  .filter((item) => checkedIds[item.entryId] !== false)
+                  .map((item) => item.entryId),
               },
               `Reconciled ${currentBank?.name} with $0.00 difference!`
             )
@@ -2730,21 +2735,45 @@ export function ReconcileView({ state, runAction, isSubmitting }: ViewProps) {
           </label>
           <select
             value={bankAccountId}
-            onChange={(e) => setBankAccountId(e.target.value)}
+            onChange={(e) => {
+              const nextId = e.target.value;
+              setBankAccountId(nextId);
+              setCheckedIds({});
+              const nextAcc = bankAccounts.find((a) => a.id === nextId);
+              if (nextAcc) {
+                setStatementEndingDollars(
+                  (nextAcc.balanceCents / 100).toFixed(2)
+                );
+              }
+            }}
             className="w-full rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold"
           >
             {bankAccounts.map((a) => (
               <option key={a.id} value={a.id}>
-                {a.name}
+                {a.name} ({formatCents(a.balanceCents)})
               </option>
             ))}
           </select>
         </div>
 
         <div>
-          <label className="block text-[11px] font-bold uppercase text-slate-400 mb-1">
-            Statement Ending Balance ($)
-          </label>
+          <div className="flex items-center justify-between mb-1">
+            <label className="block text-[11px] font-bold uppercase text-slate-400">
+              Statement Ending Balance ($)
+            </label>
+            <button
+              type="button"
+              onClick={() => {
+                setCheckedIds({});
+                setStatementEndingDollars(
+                  ((currentBank?.balanceCents ?? 0) / 100).toFixed(2)
+                );
+              }}
+              className="text-[10px] font-bold text-[#0077C5] hover:underline"
+            >
+              Use Cleared Total
+            </button>
+          </div>
           <input
             type="text"
             value={statementEndingDollars}
@@ -2786,8 +2815,12 @@ export function ReconcileView({ state, runAction, isSubmitting }: ViewProps) {
               <th className="px-4 py-3">Date</th>
               <th className="px-4 py-3">Ref</th>
               <th className="px-4 py-3">Memo / Payee</th>
-              <th className="px-4 py-3 text-right">Payment (Out)</th>
-              <th className="px-4 py-3 text-right">Deposit (In)</th>
+              <th className="px-4 py-3 text-right">
+                {isCreditCard ? "Payment / Credit (Dr)" : "Payment (Out)"}
+              </th>
+              <th className="px-4 py-3 text-right">
+                {isCreditCard ? "Charge (Cr)" : "Deposit (In)"}
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -2796,7 +2829,7 @@ export function ReconcileView({ state, runAction, isSubmitting }: ViewProps) {
                 <td className="px-4 py-3 text-center">
                   <input
                     type="checkbox"
-                    checked={Boolean(checkedIds[item.entryId])}
+                    checked={checkedIds[item.entryId] !== false}
                     onChange={(e) =>
                       setCheckedIds({
                         ...checkedIds,

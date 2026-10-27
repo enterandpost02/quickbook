@@ -1,6 +1,7 @@
 import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import {
+  categorizeAllSuggested,
   categorizeBankTransaction,
   computeReportsForFilter,
   convertEstimateToInvoice,
@@ -8,10 +9,13 @@ import {
   createInvoice,
   createTransfer,
   createVendor,
+  finishReconciliation,
   getComputedQboState,
   importBankCsvRows,
   matchBankTransaction,
+  payVendorBill,
   postJournalEntry,
+  receiveInvoicePayment,
   resetQboStore,
   reverseJournalEntry,
   runAiAutoCategorizer,
@@ -384,5 +388,135 @@ describe("QuickBooks Double-Entry Accounting Engine & CSV Suite", () => {
     const state = getComputedQboState();
     assert.ok(state.customers.some((c) => c.id === cust.id));
     assert.ok(state.vendors.some((v) => v.id === vend.id));
+  });
+
+  it("15. Bank & Credit Card Reconciliation and Dynamic Bank Balance vs QuickBooks Balance math are 100% exact", () => {
+    const initial = getComputedQboState();
+    const checkingBefore = initial.accountsWithBalances.find(
+      (a) => a.id === "acc-1000"
+    )!;
+    const amexBefore = initial.accountsWithBalances.find(
+      (a) => a.id === "acc-2100"
+    )!;
+
+    // Before categorizing pending "for_review" rows:
+    // Checking GL is $28,050.00 (2805000), pending feed is +$569.90 (+56990) => Bank Balance $28,619.90 (2861990)
+    assert.equal(checkingBefore.balanceCents, 2805000);
+    assert.equal(checkingBefore.bankBalanceCents, 2861990);
+
+    // Amex GL is $1,492.00 (149200), pending feed is -$90.00 (-9000 charge) => Bank Balance $1,582.00 (158200)
+    assert.equal(amexBefore.balanceCents, 149200);
+    assert.equal(amexBefore.bankBalanceCents, 158200);
+
+    // Categorize all suggested rows on Checking and Amex
+    categorizeAllSuggested("acc-1000");
+    categorizeAllSuggested("acc-2100");
+
+    const afterCat = getComputedQboState();
+    const checkingAfter = afterCat.accountsWithBalances.find(
+      (a) => a.id === "acc-1000"
+    )!;
+    const amexAfter = afterCat.accountsWithBalances.find(
+      (a) => a.id === "acc-2100"
+    )!;
+
+    // Now that forReviewCount === 0, Bank Balance === QuickBooks GL Balance to the exact cent!
+    assert.equal(checkingAfter.forReviewCount, 0);
+    assert.equal(checkingAfter.balanceCents, 2861990);
+    assert.equal(checkingAfter.bankBalanceCents, 2861990);
+
+    assert.equal(amexAfter.forReviewCount, 0);
+    assert.equal(amexAfter.balanceCents, 158200);
+    assert.equal(amexAfter.bankBalanceCents, 158200);
+
+    // Reconcile Checking (debit-normal) and Amex (credit-normal)
+    const checkingEntryIds = afterCat.journalEntries
+      .filter((je) => je.lines.some((l) => l.accountId === "acc-1000"))
+      .map((je) => je.id);
+    const amexEntryIds = afterCat.journalEntries
+      .filter((je) => je.lines.some((l) => l.accountId === "acc-2100"))
+      .map((je) => je.id);
+
+    // Out-of-balance reconciliation must be rejected
+    assert.throws(() => {
+      finishReconciliation({
+        bankAccountId: "acc-1000",
+        statementDate: "2026-10-31",
+        endingBalanceCents: 2861990 + 1,
+        entryIds: checkingEntryIds,
+      });
+    }, /Cannot finish reconciliation/);
+
+    // Exact $0.00 difference reconciliation succeeds for both Bank and Credit Card
+    const recChecking = finishReconciliation({
+      bankAccountId: "acc-1000",
+      statementDate: "2026-10-31",
+      endingBalanceCents: 2861990,
+      entryIds: checkingEntryIds,
+    });
+    const recAmex = finishReconciliation({
+      bankAccountId: "acc-2100",
+      statementDate: "2026-10-31",
+      endingBalanceCents: 158200,
+      entryIds: amexEntryIds,
+    });
+
+    assert.equal(recChecking.endingBalanceCents, 2861990);
+    assert.equal(recAmex.endingBalanceCents, 158200);
+  });
+
+  it("16. Sub-Ledger (A/R & A/P Aging) always equals General Ledger (1100 A/R & 2000 A/P) before and after reversals", () => {
+    function assertSubLedgerMatchesGL() {
+      const s = getComputedQboState();
+      const arGl =
+        s.accountsWithBalances.find((a) => a.id === "acc-1100")?.balanceCents ??
+        0;
+      const apGl =
+        s.accountsWithBalances.find((a) => a.id === "acc-2000")?.balanceCents ??
+        0;
+      assert.equal(s.reports.arAging.totalCents, arGl);
+      assert.equal(s.kpis.openInvoicesCents, arGl);
+      assert.equal(s.reports.apAging.totalCents, apGl);
+      assert.equal(s.kpis.openBillsCents, apGl);
+      assert.equal(s.reports.balanceSheet.isBalanced, true);
+      assert.equal(s.reports.trialBalance.isBalanced, true);
+    }
+
+    // 1. Initial seed state
+    assertSubLedgerMatchesGL();
+
+    // 2. Receive payment on inv-1002 and pay bill exp-3
+    receiveInvoicePayment({
+      invoiceId: "inv-1002",
+      date: "2026-10-26",
+      depositAccountId: "acc-1000",
+    });
+    payVendorBill({
+      expenseId: "exp-3",
+      bankAccountId: "acc-1000",
+      date: "2026-10-26",
+    });
+    assertSubLedgerMatchesGL();
+
+    // 3. Reverse both the invoice payment and the bill payment -> A/R and A/P re-open cleanly
+    const mid = getComputedQboState();
+    const invPmtJeId = mid.invoices.find(
+      (i) => i.id === "inv-1002"
+    )?.paymentJournalEntryId;
+    const billPmtJeId = mid.expenses.find(
+      (e) => e.id === "exp-3"
+    )?.paymentJournalEntryId;
+    assert.ok(invPmtJeId);
+    assert.ok(billPmtJeId);
+
+    reverseJournalEntry(invPmtJeId, "2026-10-27");
+    reverseJournalEntry(billPmtJeId, "2026-10-27");
+    assertSubLedgerMatchesGL();
+
+    // Verify Cash Basis also remains 100% balanced after payment reversals
+    const afterRev = getComputedQboState();
+    const cashReports = computeReportsForFilter(afterRev, { basis: "cash" });
+    assert.equal(cashReports.balanceSheet.isBalanced, true);
+    assert.equal(cashReports.trialBalance.isBalanced, true);
   });
 });

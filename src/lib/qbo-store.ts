@@ -1728,6 +1728,142 @@ function diffDays(dueDateStr: string, refDateStr = "2026-10-27"): number {
   return Math.floor((ref - due) / (1000 * 60 * 60 * 24));
 }
 
+function transformSingleEntryForCashBasis(
+  store: QboStoreData,
+  entry: QboJournalEntry
+): QboJournalEntry {
+  if (entry.sourceType === "invoice_payment") {
+    const inv = store.invoices.find(
+      (i) => i.id === entry.sourceId || i.paymentJournalEntryId === entry.id
+    );
+    const origJe = store.journalEntries.find(
+      (e) =>
+        e.sourceType === "invoice" &&
+        (e.id === inv?.journalEntryId ||
+          (entry.sourceId && e.sourceId === entry.sourceId))
+    );
+    const origCreditLines =
+      origJe?.lines.filter((l) => l.creditCents > 0) ?? [];
+    const origTotalCredit = origCreditLines.reduce(
+      (s, l) => s + l.creditCents,
+      0
+    );
+
+    const transformedLines: QboJournalLine[] = [];
+    for (const line of entry.lines) {
+      if (
+        line.accountId === "acc-1100" &&
+        line.creditCents > 0 &&
+        origCreditLines.length > 0 &&
+        origTotalCredit > 0
+      ) {
+        let remaining = line.creditCents;
+        const allocated = origCreditLines.map((cl, idx) => {
+          const share =
+            idx === origCreditLines.length - 1
+              ? remaining
+              : Math.round(
+                  (line.creditCents * cl.creditCents) / origTotalCredit
+                );
+          remaining -= share;
+          return {
+            ...cl,
+            id: `${line.id}-cash-${idx}`,
+            debitCents: 0,
+            creditCents: share,
+          };
+        });
+        transformedLines.push(...allocated);
+      } else if (line.accountId === "acc-1100" && line.creditCents > 0) {
+        const fallbackAcc =
+          store.accounts.find((a) => a.id === "acc-4000") ?? store.accounts[0];
+        transformedLines.push({
+          ...line,
+          accountId: fallbackAcc.id,
+          accountCode: fallbackAcc.code,
+          accountName: fallbackAcc.name,
+        });
+      } else {
+        transformedLines.push(line);
+      }
+    }
+
+    return {
+      ...entry,
+      lines: transformedLines,
+    };
+  }
+
+  if (entry.sourceType === "bill_payment") {
+    const bill = store.expenses.find(
+      (b) => b.id === entry.sourceId || b.paymentJournalEntryId === entry.id
+    );
+    const origJe = store.journalEntries.find(
+      (e) =>
+        e.sourceType === "bill" &&
+        (e.id === bill?.journalEntryId ||
+          (entry.sourceId && e.sourceId === entry.sourceId))
+    );
+    const origDebitLines =
+      origJe?.lines.filter((l) => l.debitCents > 0) ?? [];
+    const origTotalDebit = origDebitLines.reduce(
+      (s, l) => s + l.debitCents,
+      0
+    );
+
+    const transformedLines: QboJournalLine[] = [];
+    for (const line of entry.lines) {
+      if (
+        line.accountId === "acc-2000" &&
+        line.debitCents > 0 &&
+        origDebitLines.length > 0 &&
+        origTotalDebit > 0
+      ) {
+        let remaining = line.debitCents;
+        const allocated = origDebitLines.map((dl, idx) => {
+          const share =
+            idx === origDebitLines.length - 1
+              ? remaining
+              : Math.round(
+                  (line.debitCents * dl.debitCents) / origTotalDebit
+                );
+          remaining -= share;
+          return {
+            ...dl,
+            id: `${line.id}-cash-${idx}`,
+            debitCents: share,
+            creditCents: 0,
+          };
+        });
+        transformedLines.push(...allocated);
+      } else if (
+        line.accountId === "acc-2000" &&
+        line.debitCents > 0 &&
+        bill
+      ) {
+        const catAcc = store.accounts.find(
+          (a) => a.id === bill.categoryAccountId
+        );
+        transformedLines.push({
+          ...line,
+          accountId: catAcc?.id ?? "acc-5010",
+          accountCode: catAcc?.code ?? "5010",
+          accountName: catAcc?.name ?? bill.categoryAccountName,
+        });
+      } else {
+        transformedLines.push(line);
+      }
+    }
+
+    return {
+      ...entry,
+      lines: transformedLines,
+    };
+  }
+
+  return entry;
+}
+
 function getEffectiveEntriesForBasis(
   store: QboStoreData,
   basis: "accrual" | "cash"
@@ -1736,10 +1872,6 @@ function getEffectiveEntriesForBasis(
     return store.journalEntries;
   }
 
-  // Cash Basis Transformation:
-  // 1. Exclude unpaid accrual entries (sourceType === 'invoice' or 'bill')
-  // 2. Map 'invoice_payment' Credit A/R lines directly to the invoice's Income/Tax credit lines
-  // 3. Map 'bill_payment' Debit A/P lines directly to the bill's Expense/COGS debit lines
   const cashEntries: QboJournalEntry[] = [];
 
   for (const entry of store.journalEntries) {
@@ -1751,148 +1883,36 @@ function getEffectiveEntriesForBasis(
       const reversedOrig = store.journalEntries.find(
         (e) => e.id === entry.reversesEntryId
       );
-      if (
-        reversedOrig &&
-        (reversedOrig.sourceType === "invoice" ||
-          reversedOrig.sourceType === "bill")
-      ) {
-        continue;
-      }
-    }
-
-    if (entry.sourceType === "invoice_payment") {
-      const inv = store.invoices.find(
-        (i) => i.id === entry.sourceId || i.paymentJournalEntryId === entry.id
-      );
-      const origJe = store.journalEntries.find(
-        (e) =>
-          e.sourceType === "invoice" &&
-          (e.id === inv?.journalEntryId ||
-            (entry.sourceId && e.sourceId === entry.sourceId))
-      );
-      const origCreditLines =
-        origJe?.lines.filter((l) => l.creditCents > 0) ?? [];
-      const origTotalCredit = origCreditLines.reduce(
-        (s, l) => s + l.creditCents,
-        0
-      );
-
-      const transformedLines: QboJournalLine[] = [];
-      for (const line of entry.lines) {
+      if (reversedOrig) {
         if (
-          line.accountId === "acc-1100" &&
-          line.creditCents > 0 &&
-          origCreditLines.length > 0 &&
-          origTotalCredit > 0
+          reversedOrig.sourceType === "invoice" ||
+          reversedOrig.sourceType === "bill"
         ) {
-          let remaining = line.creditCents;
-          const allocated = origCreditLines.map((cl, idx) => {
-            const share =
-              idx === origCreditLines.length - 1
-                ? remaining
-                : Math.round(
-                    (line.creditCents * cl.creditCents) / origTotalCredit
-                  );
-            remaining -= share;
-            return {
-              ...cl,
-              id: `${line.id}-cash-${idx}`,
-              debitCents: 0,
-              creditCents: share,
-            };
-          });
-          transformedLines.push(...allocated);
-        } else if (line.accountId === "acc-1100" && line.creditCents > 0) {
-          const fallbackAcc =
-            store.accounts.find((a) => a.id === "acc-4000") ??
-            store.accounts[0];
-          transformedLines.push({
-            ...line,
-            accountId: fallbackAcc.id,
-            accountCode: fallbackAcc.code,
-            accountName: fallbackAcc.name,
-          });
-        } else {
-          transformedLines.push(line);
+          continue;
         }
-      }
-
-      cashEntries.push({
-        ...entry,
-        lines: transformedLines,
-      });
-      continue;
-    }
-
-    if (entry.sourceType === "bill_payment") {
-      const bill = store.expenses.find(
-        (b) => b.id === entry.sourceId || b.paymentJournalEntryId === entry.id
-      );
-      const origJe = store.journalEntries.find(
-        (e) =>
-          e.sourceType === "bill" &&
-          (e.id === bill?.journalEntryId ||
-            (entry.sourceId && e.sourceId === entry.sourceId))
-      );
-      const origDebitLines =
-        origJe?.lines.filter((l) => l.debitCents > 0) ?? [];
-      const origTotalDebit = origDebitLines.reduce(
-        (s, l) => s + l.debitCents,
-        0
-      );
-
-      const transformedLines: QboJournalLine[] = [];
-      for (const line of entry.lines) {
         if (
-          line.accountId === "acc-2000" &&
-          line.debitCents > 0 &&
-          origDebitLines.length > 0 &&
-          origTotalDebit > 0
+          reversedOrig.sourceType === "invoice_payment" ||
+          reversedOrig.sourceType === "bill_payment"
         ) {
-          let remaining = line.debitCents;
-          const allocated = origDebitLines.map((dl, idx) => {
-            const share =
-              idx === origDebitLines.length - 1
-                ? remaining
-                : Math.round(
-                    (line.debitCents * dl.debitCents) / origTotalDebit
-                  );
-            remaining -= share;
-            return {
-              ...dl,
-              id: `${line.id}-cash-${idx}`,
-              debitCents: share,
-              creditCents: 0,
-            };
-          });
-          transformedLines.push(...allocated);
-        } else if (
-          line.accountId === "acc-2000" &&
-          line.debitCents > 0 &&
-          bill
-        ) {
-          const catAcc = store.accounts.find(
-            (a) => a.id === bill.categoryAccountId
+          const transformedOrig = transformSingleEntryForCashBasis(
+            store,
+            reversedOrig
           );
-          transformedLines.push({
-            ...line,
-            accountId: catAcc?.id ?? "acc-5010",
-            accountCode: catAcc?.code ?? "5010",
-            accountName: catAcc?.name ?? bill.categoryAccountName,
+          cashEntries.push({
+            ...entry,
+            lines: transformedOrig.lines.map((l, idx) => ({
+              ...l,
+              id: `${entry.id}-rev-cash-${idx}`,
+              debitCents: l.creditCents,
+              creditCents: l.debitCents,
+            })),
           });
-        } else {
-          transformedLines.push(line);
+          continue;
         }
       }
-
-      cashEntries.push({
-        ...entry,
-        lines: transformedLines,
-      });
-      continue;
     }
 
-    cashEntries.push(entry);
+    cashEntries.push(transformSingleEntryForCashBasis(store, entry));
   }
 
   return cashEntries;
@@ -2279,12 +2299,25 @@ export function getComputedQboState(): ComputedQboState {
         ? debitTotalCents - creditTotalCents
         : creditTotalCents - debitTotalCents;
 
-    const forReviewCount = store.bankTransactions.filter(
+    const pendingForReviewTxs = store.bankTransactions.filter(
       (t) => t.bankAccountId === acc.id && t.status === "for_review"
-    ).length;
+    );
+    const forReviewCount = pendingForReviewTxs.length;
+    const pendingNetCents = pendingForReviewTxs.reduce(
+      (s, t) => s + t.amountCents,
+      0
+    );
+
+    const dynamicBankBalanceCents =
+      acc.type === "Bank"
+        ? balanceCents + pendingNetCents
+        : acc.type === "Credit Card"
+        ? balanceCents - pendingNetCents
+        : acc.bankBalanceCents;
 
     return {
       ...acc,
+      bankBalanceCents: dynamicBankBalanceCents,
       debitTotalCents,
       creditTotalCents,
       balanceCents,
@@ -2775,6 +2808,70 @@ export function reverseJournalEntry(
   });
 
   original.reversedByEntryId = reversal.id;
+
+  // Keep sub-ledger records (Invoices, Bills, Bank Feed rows) in 100% sync with the General Ledger reversal
+  if (original.sourceType === "invoice") {
+    const inv = store.invoices.find(
+      (i) => i.id === original.sourceId || i.journalEntryId === original.id
+    );
+    if (inv) {
+      inv.balanceDueCents = 0;
+      inv.status = "Paid";
+    }
+  } else if (original.sourceType === "invoice_payment") {
+    const inv = store.invoices.find(
+      (i) =>
+        i.id === original.sourceId || i.paymentJournalEntryId === original.id
+    );
+    const arCreditCleared = original.lines
+      .filter((l) => l.accountId === "acc-1100")
+      .reduce((s, l) => s + l.creditCents, 0);
+    if (inv && arCreditCleared > 0) {
+      inv.balanceDueCents = Math.min(
+        inv.totalCents,
+        inv.balanceDueCents + arCreditCleared
+      );
+      inv.status = diffDays(inv.dueDate) > 0 ? "Overdue" : "Open";
+    }
+  } else if (original.sourceType === "bill") {
+    const bill = store.expenses.find(
+      (e) =>
+        e.type === "Bill" &&
+        (e.id === original.sourceId || e.journalEntryId === original.id)
+    );
+    if (bill) {
+      bill.status = "Paid";
+    }
+  } else if (original.sourceType === "bill_payment") {
+    const bill = store.expenses.find(
+      (e) =>
+        e.type === "Bill" &&
+        (e.id === original.sourceId || e.paymentJournalEntryId === original.id)
+    );
+    const apDebitCleared = original.lines
+      .filter((l) => l.accountId === "acc-2000")
+      .reduce((s, l) => s + l.debitCents, 0);
+    if (bill) {
+      if (bill.status !== "Paid" && apDebitCleared > 0) {
+        bill.amountCents += apDebitCleared;
+      }
+      bill.status = "Open";
+    }
+  }
+
+  // If the reversed entry originated from the Bank Feed (categorize or match), return the bank transaction to "for_review"
+  const linkedBankTx = store.bankTransactions.find(
+    (t) =>
+      t.postedJournalEntryId === original.id ||
+      (original.sourceType === "bank_feed" && t.id === original.sourceId)
+  );
+  if (linkedBankTx) {
+    linkedBankTx.status = "for_review";
+    linkedBankTx.postedJournalEntryId = undefined;
+    linkedBankTx.matchedInvoiceId = undefined;
+    linkedBankTx.matchedBillId = undefined;
+  }
+
   return reversal;
 }
 
@@ -2856,6 +2953,29 @@ export function excludeBankTransaction(transactionId: string): void {
   if (!tx) throw new Error("Bank transaction not found.");
   tx.status = "excluded";
   appendAuditLog("Bank Transaction Excluded", tx.description, Math.abs(tx.amountCents));
+}
+
+export function categorizeAllSuggested(bankAccountId?: string): number {
+  assertCanWrite();
+  const store = getRawStore();
+  const pendingWithSuggestion = store.bankTransactions.filter(
+    (t) =>
+      t.status === "for_review" &&
+      t.suggestedAccountId &&
+      (!bankAccountId || t.bankAccountId === bankAccountId)
+  );
+  let count = 0;
+  for (const tx of pendingWithSuggestion) {
+    if (tx.suggestedAccountId) {
+      categorizeBankTransaction({
+        transactionId: tx.id,
+        categoryAccountId: tx.suggestedAccountId,
+        payee: tx.payee,
+      });
+      count++;
+    }
+  }
+  return count;
 }
 
 export function importBankCsvRows(input: {
@@ -3440,12 +3560,42 @@ export function finishReconciliation(input: {
   if (!bankAcc) throw new Error("Bank account not found.");
 
   const idSet = new Set(input.entryIds);
+  const isCreditCard = bankAcc.normalBalance === "credit";
   let clearedCount = 0;
+  let clearedBalanceCents = 0;
+
+  for (const entry of store.journalEntries) {
+    if (!idSet.has(entry.id)) continue;
+    const matchingLines = entry.lines.filter(
+      (l) => l.accountId === bankAcc.id
+    );
+    if (matchingLines.length === 0) continue;
+
+    const totalDebit = matchingLines.reduce((s, l) => s + l.debitCents, 0);
+    const totalCredit = matchingLines.reduce((s, l) => s + l.creditCents, 0);
+    const netCents = isCreditCard
+      ? totalCredit - totalDebit
+      : totalDebit - totalCredit;
+
+    clearedBalanceCents += netCents;
+  }
+
+  if (clearedBalanceCents !== input.endingBalanceCents) {
+    throw new Error(
+      `Cannot finish reconciliation: Statement Ending Balance (${input.endingBalanceCents} cents) does not match Cleared Balance (${clearedBalanceCents} cents). Difference must be $0.00.`
+    );
+  }
 
   for (const entry of store.journalEntries) {
     if (idSet.has(entry.id)) {
       entry.reconciled = true;
       clearedCount++;
+    }
+  }
+
+  for (const tx of store.bankTransactions) {
+    if (tx.postedJournalEntryId && idSet.has(tx.postedJournalEntryId)) {
+      tx.reconciled = true;
     }
   }
 

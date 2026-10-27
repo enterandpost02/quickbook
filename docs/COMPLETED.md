@@ -72,5 +72,5 @@
   - Added `CreateCustomerModal` and `CreateVendorModal` accessible from `+ New` Quick Create, the Sales & Invoices header (`+ New Customer`), and the Expenses & Vendors header (`+ New Vendor`).
 - **Authenticated User Session & Role Switcher Menu:**
   - Added an interactive User Session & Company Profile dropdown on the top-right header avatar in [`src/components/qbo/qbo-workspace.tsx`](../src/components/qbo/qbo-workspace.tsx) showing active user details, role switcher (`Owner`, `Bookkeeper`, `Accountant`), and direct links to `/login` and `/signup`.
-- **Expanded Automated Test Suite (14/14 Passing Tests):**
-  - Added unit tests 11–14 in [`src/lib/__tests__/qbo-engine.test.ts`](../src/lib/__tests__/qbo-engine.test.ts) verifying integer-cent Sales Tax math, partial & full Bank Feed Invoice/Bill matching, Cash vs. Accrual basis & Date-Range report balance invariants, and Customer/Vendor creation.
+- **Expanded Automated Test Suite (16/16 Passing Tests):**
+  - Added unit tests 11–16 in [`src/lib/__tests__/qbo-engine.test.ts`](../src/lib/__tests__/qbo-engine.test.ts) verifying integer-cent Sales Tax math, partial & full Bank Feed Invoice/Bill matching, Cash vs. Accrual basis & Date-Range report balance invariants, Customer/Vendor creation, Bank & Credit Card Reconciliation (`Difference === $0.00` enforcement), dynamic Bank Balance vs. QuickBooks GL Balance math, and Sub-Ledger (`arAging` / `apAging`) vs. General Ledger (`1100 A/R` / `2000 A/P`) equality before and after reversals.

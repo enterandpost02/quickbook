@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import {
+  categorizeAllSuggested,
   categorizeBankTransaction,
   convertEstimateToInvoice,
   createAccount,
@@ -86,22 +87,7 @@ export async function POST(request: Request) {
         break;
       }
       case "categorize_all_suggested": {
-        const store = getRawStore();
-        const pendingWithSuggestion = store.bankTransactions.filter(
-          (t) =>
-            t.status === "for_review" &&
-            t.suggestedAccountId &&
-            (!payload?.bankAccountId || t.bankAccountId === payload.bankAccountId)
-        );
-        for (const tx of pendingWithSuggestion) {
-          if (tx.suggestedAccountId) {
-            categorizeBankTransaction({
-              transactionId: tx.id,
-              categoryAccountId: tx.suggestedAccountId,
-              payee: tx.payee,
-            });
-          }
-        }
+        categorizeAllSuggested(payload?.bankAccountId);
         break;
       }
       case "exclude_bank_tx": {
