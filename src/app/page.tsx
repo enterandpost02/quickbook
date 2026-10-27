@@ -1,9 +1,13 @@
-import { getComputedQboState } from "@/lib/qbo-store";
-import { QboWorkspace } from "@/components/qbo/qbo-workspace";
+import { redirect } from "next/navigation";
+import { getCurrentAuth } from "@/lib/auth";
 
 export const instant = false;
 
 export default async function HomePage() {
-  const initialState = getComputedQboState();
-  return <QboWorkspace initialState={initialState} />;
+  const auth = await getCurrentAuth();
+  if (auth) {
+    redirect("/dashboard");
+  } else {
+    redirect("/login");
+  }
 }

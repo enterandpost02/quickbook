@@ -13,6 +13,7 @@ import {
   Landmark,
   LayoutDashboard,
   Lock,
+  LogOut,
   Plus,
   Receipt,
   RotateCcw,
@@ -46,10 +47,19 @@ import {
   type QboNavTab,
 } from "./qbo-views";
 
+export interface CurrentUserSession {
+  id?: string;
+  email?: string;
+  fullName?: string;
+  role?: "owner" | "staff" | "accountant";
+}
+
 export function QboWorkspace({
   initialState,
+  currentUser,
 }: {
   initialState: ComputedQboState;
+  currentUser?: CurrentUserSession;
 }) {
   const [state, setState] = useState<ComputedQboState>(initialState);
   const [activeTab, setActiveTab] = useState<QboNavTab>("home");
@@ -68,6 +78,16 @@ export function QboWorkspace({
     type: "success" | "error";
     message: string;
   } | null>(null);
+
+  async function handleLogout() {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch (e) {
+      console.warn("Logout error:", e);
+    } finally {
+      window.location.href = "/login";
+    }
+  }
 
   // Top Global Search State
   const [searchQuery, setSearchQuery] = useState("");
@@ -332,6 +352,15 @@ export function QboWorkspace({
             <RotateCcw className="h-3 w-3" />
             Load Demo Practice Data
           </button>
+
+          <button
+            onClick={() => handleLogout()}
+            className="w-full flex items-center justify-center gap-1.5 rounded-lg border border-red-500/40 bg-red-950/20 py-1.5 text-[11px] font-bold text-red-300 hover:text-white hover:bg-red-900/50 hover:border-red-500 transition-colors"
+            title="Sign out of QuickBooks session and return to login"
+          >
+            <LogOut className="h-3 w-3" />
+            Sign Out / Log Out
+          </button>
         </div>
       </aside>
 
@@ -584,8 +613,10 @@ export function QboWorkspace({
               >
                 <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#0077C5] text-white text-xs font-bold">
                   {(
+                    currentUser?.fullName ||
                     state.teamMembers.find((m) => m.role === state.activeRole)
-                      ?.name ?? "Enter & Post Admin"
+                      ?.name ||
+                    "Enter & Post Admin"
                   )
                     .split(" ")
                     .map((n) => n[0])
@@ -593,8 +624,10 @@ export function QboWorkspace({
                     .slice(0, 2)}
                 </div>
                 <span className="hidden lg:inline text-xs font-semibold text-slate-700">
-                  {state.teamMembers.find((m) => m.role === state.activeRole)
-                    ?.name ?? "Enter & Post Admin"}
+                  {currentUser?.fullName ||
+                    state.teamMembers.find((m) => m.role === state.activeRole)
+                      ?.name ||
+                    "Enter & Post Admin"}
                 </span>
                 <ChevronDown className="h-3 w-3 text-slate-400" />
               </button>
@@ -603,14 +636,18 @@ export function QboWorkspace({
                 <div className="absolute right-0 mt-2 w-72 rounded-xl border border-slate-200 bg-white shadow-xl z-50 overflow-hidden">
                   <div className="p-3.5 bg-[#1E252B] text-white">
                     <p className="text-xs font-bold">
-                      {state.teamMembers.find(
-                        (m) => m.role === state.activeRole
-                      )?.name ?? "Enter & Post Admin"}
+                      {currentUser?.fullName ||
+                        state.teamMembers.find(
+                          (m) => m.role === state.activeRole
+                        )?.name ||
+                        "Enter & Post Admin"}
                     </p>
                     <p className="text-[11px] text-slate-300 truncate font-mono">
-                      {state.teamMembers.find(
-                        (m) => m.role === state.activeRole
-                      )?.email ?? "enterandpost02@gmail.com"}
+                      {currentUser?.email ||
+                        state.teamMembers.find(
+                          (m) => m.role === state.activeRole
+                        )?.email ||
+                        "enterandpost02@gmail.com"}
                     </p>
                     <div className="mt-2 flex items-center gap-1.5">
                       <span className="rounded bg-[#2CA01C] px-2 py-0.5 text-[10px] font-bold uppercase text-white">
@@ -626,7 +663,7 @@ export function QboWorkspace({
 
                   <div className="p-2 border-b border-slate-100">
                     <p className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                      Switch Active User Role (RBAC)
+                      Active User Role (RBAC)
                     </p>
                     {(["owner", "staff", "accountant"] as const).map(
                       (r) => (
@@ -679,6 +716,16 @@ export function QboWorkspace({
                     >
                       + Register new user &amp; company (/signup)
                     </a>
+
+                    <div className="my-1 border-t border-slate-200" />
+
+                    <button
+                      onClick={() => handleLogout()}
+                      className="w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-bold text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors text-left border border-red-200/60 bg-red-50/30"
+                    >
+                      <LogOut className="h-3.5 w-3.5 text-red-600" />
+                      Sign Out / Log Out
+                    </button>
                   </div>
                 </div>
               )}

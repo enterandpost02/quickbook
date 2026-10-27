@@ -27,6 +27,7 @@
 - [x] **User Profile & Session Header Menu:** Top-right user session menu linking active company role switching with `/login` and `/signup`.
 - [x] **Primary Administrator Account & Auto-Seeding:** Configured production user `enterandpost02@gmail.com` with password `Standard@1122` and auto-seeding.
 - [x] **Automated Employee Invitation Mailer:** Branded invitation emails dispatched from `enterandpost02@gmail.com` via Nodemailer / Gmail SMTP.
+- [x] **Dedicated Logout & Route Protection:** Instant session destruction via `/api/auth/logout`, sidebar/header logout buttons, and `/` & `/dashboard` auth redirects.
 - [ ] **Receipt File Upload & Attachment Preview:** Attach PDF/image receipts to Expenses and Vendor Bills.
 - [ ] **Recurring Invoices & Scheduled Reminders:** Configure recurring monthly/weekly invoice templates.
 

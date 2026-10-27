@@ -127,3 +127,17 @@
   - Added **Test 20** in [`src/lib/__tests__/qbo-engine.test.ts`](../src/lib/__tests__/qbo-engine.test.ts) verifying admin credentials matching, seeded owner presence, team member invite creation, email payload generation from `enterandpost02@gmail.com`, and read-only RBAC mutation blocking.
 - **Verified Production Build:**
   - `npm run build` compiled all 8 static and dynamic routes (`/`, `/_not-found`, `/api/qbo`, `/dashboard`, `/login`, `/signup`) with 0 errors.
+
+## Phase 14 — Dedicated Logout Flow, Route Protection & Robust RBAC Authorization
+- **Accessible Logout Controls:**
+  - Built dedicated **"Sign Out / Log Out"** buttons in both the top-right user profile dropdown and the bottom of the left dark navigation sidebar in [`src/components/qbo/qbo-workspace.tsx`](../src/components/qbo/qbo-workspace.tsx).
+  - Created [`src/app/api/auth/logout/route.ts`](../src/app/api/auth/logout/route.ts) supporting both `POST` and `GET` requests to delete the database session record from PostgreSQL, delete the `qb_session` cookie, and redirect to `/login`.
+- **Route Protection & Authentication Guards:**
+  - Protected [`src/app/page.tsx`](../src/app/page.tsx): Unauthenticated users are redirected to `/login`, while authenticated users are redirected to `/dashboard`.
+  - Protected [`src/app/(dashboard)/dashboard/page.tsx`](../src/app/(dashboard)/dashboard/page.tsx): Uses `getCurrentAuth()` to verify session validity, pass the authenticated user into `QboWorkspace`, and automatically synchronize the company ledger's `activeRole` with the user's authorized role.
+- **Backend & API Authorization (RBAC Enforcement):**
+  - Added `assertIsOwner()` in [`src/lib/qbo-store.ts`](../src/lib/qbo-store.ts) to strictly guard administrative operations: `wipeAllCompanyTransactions()` and `setPeriodLockDate()` cannot be executed by staff or accountants.
+  - Added authorization guards in [`src/app/api/qbo/route.ts`](../src/app/api/qbo/route.ts) returning HTTP 403 Forbidden if an accountant attempts non-read operations or if staff attempts owner-only actions.
+- **Verified Production Build & Tests:**
+  - 20/20 automated tests passing (`npm test`).
+  - Next.js 16 production build succeeded across all 9 routes (`/`, `/_not-found`, `/api/auth/logout`, `/api/qbo`, `/dashboard`, `/login`, `/signup`).

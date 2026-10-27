@@ -14,8 +14,9 @@ flowchart TB
         Modals["Quick Create (+ New), New Company Modal & Transaction Modals"]
     end
 
-    subgraph API["Next.js App Router Backend (/api/qbo)"]
+    subgraph API["Next.js App Router Backend (/api/qbo & /api/auth)"]
         RouteHandler["GET / POST /api/qbo Route Handler"]
+        AuthRoutes["Logout & Session Endpoint (/api/auth/logout)"]
         CSVParser["Multi-Bank CSV Parser & Duplicate Detector (src/lib/csv-parser.ts)"]
         Mailer["Employee Invitation Mailer from enterandpost02@gmail.com (src/lib/mailer.ts)"]
     end

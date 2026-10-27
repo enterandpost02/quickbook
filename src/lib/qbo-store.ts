@@ -1592,6 +1592,7 @@ export function resetQboStore(): QboStoreData {
 }
 
 export function wipeAllCompanyTransactions(): QboStoreData {
+  assertIsOwner("wipe all company sample data");
   assertCanWrite();
   const store = getRawStore();
   store.journalEntries = [];
@@ -2853,6 +2854,17 @@ function assertCanWrite(): void {
   }
 }
 
+function assertIsOwner(actionName?: string): void {
+  const store = getRawStore();
+  if (store.activeRole !== "owner") {
+    throw new Error(
+      `Permission denied: Only the Company Owner can ${
+        actionName || "perform this administrative operation"
+      }. (Current role: ${store.activeRole})`
+    );
+  }
+}
+
 export function postJournalEntry(input: {
   date: string;
   memo: string;
@@ -3476,6 +3488,7 @@ export function createTransfer(input: {
 }
 
 export function setPeriodLockDate(lockedThroughDate: string | null): void {
+  assertIsOwner("close the books or modify period locks");
   assertCanWrite();
   const store = getRawStore();
   store.lockedThroughDate = lockedThroughDate;
@@ -3814,6 +3827,9 @@ export function inviteTeamMember(input: {
   role: "owner" | "staff" | "accountant";
 }): QboTeamMember {
   assertCanWrite();
+  if (input.role === "owner") {
+    assertIsOwner("invite another Company Owner");
+  }
   const store = getRawStore();
   const member: QboTeamMember = {
     id: `tm-${Date.now()}`,

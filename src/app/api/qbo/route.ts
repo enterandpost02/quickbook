@@ -35,6 +35,7 @@ import {
   setActiveOrgCookieSafe,
 } from "@/lib/qbo-db";
 import { sendTeamInviteEmail } from "@/lib/mailer";
+import { getCurrentAuth } from "@/lib/auth";
 
 export async function GET() {
   const { state } = await loadQboStoreFromDb();
@@ -64,6 +65,35 @@ export async function POST(request: Request) {
     }
 
     const { organizationId } = await loadQboStoreFromDb();
+
+    // Verify authenticated user authorization (RBAC)
+    const auth = await getCurrentAuth();
+    if (auth) {
+      if (auth.role === "accountant") {
+        if (action === "set_active_role" && payload?.role !== "accountant") {
+          return NextResponse.json(
+            { error: "Forbidden: Accountants cannot elevate their role to owner or staff." },
+            { status: 403 }
+          );
+        }
+        if (action !== "set_active_role") {
+          return NextResponse.json(
+            { error: "Forbidden: Accountant role is strictly read-only and cannot mutate company records." },
+            { status: 403 }
+          );
+        }
+      }
+
+      if (auth.role === "staff") {
+        const ownerOnlyActions = ["wipe_transactions", "set_period_lock", "create_organization"];
+        if (ownerOnlyActions.includes(action)) {
+          return NextResponse.json(
+            { error: `Forbidden: Only Company Owners can perform '${action}'.` },
+            { status: 403 }
+          );
+        }
+      }
+    }
 
     switch (action) {
       case "post_journal_entry": {

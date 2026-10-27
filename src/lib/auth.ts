@@ -152,14 +152,18 @@ export async function createSession(
 }
 
 export async function destroyCurrentSession(): Promise<void> {
-  const cookieStore = await cookies();
-  const rawToken = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-  if (rawToken) {
-    const db = await getDb();
-    const tokenHash = hashSessionToken(rawToken);
-    await db.delete(sessions).where(eq(sessions.tokenHash, tokenHash));
+  try {
+    const cookieStore = await cookies();
+    const rawToken = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+    if (rawToken) {
+      const db = await getDb();
+      const tokenHash = hashSessionToken(rawToken);
+      await db.delete(sessions).where(eq(sessions.tokenHash, tokenHash));
+    }
+    cookieStore.delete(SESSION_COOKIE_NAME);
+  } catch {
+    // Ignore when called outside a Next.js cookie context
   }
-  cookieStore.delete(SESSION_COOKIE_NAME);
 }
 
 export interface AuthContext {
@@ -174,8 +178,13 @@ export interface AuthContext {
 }
 
 export async function getCurrentAuth(): Promise<AuthContext | null> {
-  const cookieStore = await cookies();
-  const rawToken = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+  let rawToken: string | undefined;
+  try {
+    const cookieStore = await cookies();
+    rawToken = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+  } catch {
+    return null;
+  }
   if (!rawToken) return null;
 
   const tokenHash = hashSessionToken(rawToken);

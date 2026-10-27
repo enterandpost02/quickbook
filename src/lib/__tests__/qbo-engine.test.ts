@@ -773,6 +773,19 @@ describe("QuickBooks Double-Entry Accounting Engine & CSV Suite", () => {
       });
     }, /Permission denied: Accountant role is read-only/);
 
+    // 6. Verify RBAC prevents Staff from owner-only administrative actions
+    setActiveRole("staff");
+    assert.throws(() => {
+      wipeAllCompanyTransactions();
+    }, /Permission denied: Only the Company Owner/);
+
+    assert.throws(() => {
+      setPeriodLockDate("2026-08-31");
+    }, /Permission denied: Only the Company Owner/);
+
     setActiveRole("owner");
+    // Owner can set period lock
+    setPeriodLockDate("2026-08-31");
+    assert.equal(getComputedQboState().lockedThroughDate, "2026-08-31");
   });
 });

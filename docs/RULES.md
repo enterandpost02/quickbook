@@ -41,9 +41,12 @@
 - **Organization Isolation (`organization_id`):**
   - Every database table and query in PostgreSQL/Drizzle must filter by `organization_id` so one business can never see or mutate another business's books.
 - **Role-Based Access Control (RBAC):**
-  - `owner`: Full read/write access, team management, and period lock control.
-  - `staff`: Standard bookkeeping read/write access.
-  - `accountant`: Strictly **Read-Only** (`assertCanWrite()` blocks all write mutations while allowing full inspection of reports, general ledger, and audit logs).
+  - `owner`: Full read/write access, team management, period lock control, and sample data wiping (`assertIsOwner()` strictly guards administrative operations).
+  - `staff`: Standard bookkeeping read/write access; cannot wipe transactions, close books, or invite other owners.
+  - `accountant`: Strictly **Read-Only** (`assertCanWrite()` blocks all write mutations while allowing full inspection of reports, general ledger, and audit logs; privilege escalation blocked with HTTP 403).
+- **Session Lifecycle & Route Protection:**
+  - Pages `/` and `/dashboard` require an active session token (`qb_session`); unauthenticated users are redirected to `/login`.
+  - Logging out immediately deletes the database session token in PostgreSQL and clears the `qb_session` cookie via `/api/auth/logout`.
 
 ## 3. AI & Developer Workflow Rules
 - **Living Documentation (Mandatory):**
