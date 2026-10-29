@@ -1,4 +1,7 @@
 import { NextResponse } from "next/server";
+import { eq } from "drizzle-orm";
+import { getDb } from "@/db";
+import { sessions } from "@/db/schema";
 import {
   categorizeAllSuggested,
   categorizeBankTransaction,
@@ -21,11 +24,13 @@ import {
   payVendorBill,
   postJournalEntry,
   receiveInvoicePayment,
+  removeTeamMemberFromStore,
   resetQboStore,
   reverseJournalEntry,
   runAiAutoCategorizer,
   setActiveRole,
   setPeriodLockDate,
+  updateTeamMemberRoleInStore,
   wipeAllCompanyTransactions,
 } from "@/lib/qbo-store";
 import {
@@ -35,65 +40,201 @@ import {
   setActiveOrgCookieSafe,
 } from "@/lib/qbo-db";
 import { sendTeamInviteEmail } from "@/lib/mailer";
-import { getCurrentAuth } from "@/lib/auth";
+import {
+  getCurrentAuth,
+  provisionOrInviteTeamMemberInDb,
+  removeTeamMemberFromDb,
+  updateTeamMemberRoleInDb,
+} from "@/lib/auth";
 
 export async function GET() {
-  const { state } = await loadQboStoreFromDb();
+  const auth = await getCurrentAuth();
+  if (!auth) {
+    return NextResponse.json(
+      { error: "Unauthorized: Please sign in to access your books." },
+      { status: 401 }
+    );
+  }
+
+  const allowedOrgIds = auth.isSuperAdmin
+    ? undefined
+    : auth.memberships.map((m) => m.organization.id);
+
+  const { state } = await loadQboStoreFromDb(auth.organization.id, {
+    allowedOrgIds,
+  });
+  state.activeRole = auth.isSuperAdmin ? "owner" : auth.role;
   return NextResponse.json(state);
 }
 
 export async function POST(request: Request) {
   try {
+    const auth = await getCurrentAuth();
+    if (!auth) {
+      return NextResponse.json(
+        { error: "Unauthorized: Your session has expired. Please sign in again." },
+        { status: 401 }
+      );
+    }
+
     const body = await request.json();
-    const { action, payload } = body;
+    const { action, payload, previewRole } = body;
+
+    const allowedOrgIds = auth.isSuperAdmin
+      ? undefined
+      : auth.memberships.map((m) => m.organization.id);
 
     if (action === "switch_organization") {
-      await setActiveOrgCookieSafe(payload.organizationId);
-      const { state } = await loadQboStoreFromDb(payload.organizationId);
+      const targetOrgId = String(payload?.organizationId ?? "");
+      if (!targetOrgId) {
+        return NextResponse.json(
+          { error: "Organization ID is required." },
+          { status: 400 }
+        );
+      }
+
+      const targetMembership = auth.memberships.find(
+        (m) => m.organization.id === targetOrgId
+      );
+      if (!auth.isSuperAdmin && !targetMembership) {
+        return NextResponse.json(
+          { error: "Forbidden: You do not have access to that organization." },
+          { status: 403 }
+        );
+      }
+
+      const db = await getDb();
+      await db
+        .update(sessions)
+        .set({ activeOrganizationId: targetOrgId })
+        .where(eq(sessions.id, auth.sessionId));
+
+      await setActiveOrgCookieSafe(targetOrgId);
+      const { state } = await loadQboStoreFromDb(targetOrgId, {
+        allowedOrgIds,
+      });
+      state.activeRole = auth.isSuperAdmin
+        ? "owner"
+        : (targetMembership?.role ?? "accountant");
       return NextResponse.json(state);
     }
 
     if (action === "create_organization") {
+      if (!auth.isSuperAdmin && auth.role !== "owner") {
+        return NextResponse.json(
+          {
+            error:
+              "Forbidden: Only Company Owners can create new client organizations.",
+          },
+          { status: 403 }
+        );
+      }
+
       const newOrgId = await createOrganizationInDb({
         name: payload.name,
         template: payload.template ?? "empty",
         industry: payload.industry,
         taxId: payload.taxId,
+        ownerUserId: auth.isSuperAdmin ? undefined : auth.user.id,
+        ownerInfo: auth.isSuperAdmin
+          ? undefined
+          : {
+              id: auth.user.id,
+              name: auth.user.fullName,
+              email: auth.user.email,
+            },
       });
-      const { state } = await loadQboStoreFromDb(newOrgId);
+
+      const db = await getDb();
+      await db
+        .update(sessions)
+        .set({ activeOrganizationId: newOrgId })
+        .where(eq(sessions.id, auth.sessionId));
+
+      const updatedAllowedOrgIds = allowedOrgIds
+        ? [...allowedOrgIds, newOrgId]
+        : undefined;
+      const { state } = await loadQboStoreFromDb(newOrgId, {
+        allowedOrgIds: updatedAllowedOrgIds,
+      });
+      state.activeRole = "owner";
       return NextResponse.json(state);
     }
 
-    const { organizationId } = await loadQboStoreFromDb();
+    const { organizationId } = await loadQboStoreFromDb(auth.organization.id, {
+      allowedOrgIds,
+    });
 
-    // Verify authenticated user authorization (RBAC)
-    const auth = await getCurrentAuth();
-    const isRoleSwitchAction = action === "set_active_role" || action === "switch_role";
-    if (auth) {
-      if (auth.role === "accountant") {
-        if (isRoleSwitchAction && payload?.role !== "accountant") {
-          return NextResponse.json(
-            { error: "Forbidden: Accountants cannot elevate their role to owner or staff." },
-            { status: 403 }
-          );
-        }
-        if (!isRoleSwitchAction) {
-          return NextResponse.json(
-            { error: "Forbidden: Accountant role is strictly read-only and cannot mutate company records." },
-            { status: 403 }
-          );
-        }
+    // Strict Server-Side Role-Based Authorization (RBAC)
+    const effectiveRole = auth.isSuperAdmin ? "owner" : auth.role;
+    const isRoleSwitchAction =
+      action === "set_active_role" || action === "switch_role";
+
+    if (effectiveRole === "accountant") {
+      if (isRoleSwitchAction && payload?.role !== "accountant") {
+        return NextResponse.json(
+          {
+            error:
+              "Forbidden: Accountants cannot elevate their role to owner or staff.",
+          },
+          { status: 403 }
+        );
+      }
+      if (!isRoleSwitchAction) {
+        return NextResponse.json(
+          {
+            error:
+              "Forbidden: Accountant role is strictly read-only and cannot mutate company records.",
+          },
+          { status: 403 }
+        );
+      }
+    }
+
+    if (effectiveRole === "staff") {
+      if (isRoleSwitchAction && payload?.role === "owner") {
+        return NextResponse.json(
+          {
+            error:
+              "Forbidden: Staff Bookkeepers cannot elevate their role to Company Owner.",
+          },
+          { status: 403 }
+        );
       }
 
-      if (auth.role === "staff") {
-        const ownerOnlyActions = ["wipe_transactions", "set_period_lock", "create_organization"];
-        if (ownerOnlyActions.includes(action)) {
-          return NextResponse.json(
-            { error: `Forbidden: Only Company Owners can perform '${action}'.` },
-            { status: 403 }
-          );
-        }
+      const ownerOnlyActions = [
+        "wipe_transactions",
+        "reset_demo",
+        "set_period_lock",
+        "create_organization",
+        "invite_team_member",
+        "resend_invite_email",
+        "update_team_member_role",
+        "remove_team_member",
+      ];
+      if (ownerOnlyActions.includes(action)) {
+        return NextResponse.json(
+          { error: `Forbidden: Only Company Owners can perform '${action}'.` },
+          { status: 403 }
+        );
       }
+    }
+
+    // Bind authenticated user's verified role into the store before running mutations
+    // Owners / Super Admins may optionally preview staff/accountant permissions in their UI
+    const validPreviewRole =
+      previewRole === "owner" ||
+      previewRole === "staff" ||
+      previewRole === "accountant"
+        ? (previewRole as "owner" | "staff" | "accountant")
+        : undefined;
+    const executionRole =
+      effectiveRole === "owner" && validPreviewRole && !isRoleSwitchAction
+        ? validPreviewRole
+        : effectiveRole;
+
+    if (!isRoleSwitchAction) {
+      getRawStore().activeRole = executionRole;
     }
 
     switch (action) {
@@ -131,7 +272,12 @@ export async function POST(request: Request) {
       }
       case "import_csv": {
         const result = importBankCsvRows(payload);
-        const state = saveQboStoreFast(organizationId);
+        const state = saveQboStoreFast(
+          organizationId,
+          undefined,
+          allowedOrgIds
+        );
+        state.activeRole = effectiveRole;
         return NextResponse.json({ ...state, importResult: result });
       }
       case "create_invoice": {
@@ -192,19 +338,71 @@ export async function POST(request: Request) {
         break;
       }
       case "invite_team_member": {
-        const member = inviteTeamMember(payload);
+        const dbInvite = await provisionOrInviteTeamMemberInDb({
+          organizationId,
+          invitedByUserId: auth.user.id,
+          name: payload.name,
+          email: payload.email,
+          role: payload.role,
+          initialPassword: payload.initialPassword,
+        });
+
+        inviteTeamMember({
+          id: dbInvite.member.id,
+          name: dbInvite.member.name,
+          email: dbInvite.member.email,
+          role: dbInvite.member.role,
+          status: dbInvite.member.status,
+        });
+
         const origin = new URL(request.url).origin;
         const mailResult = await sendTeamInviteEmail({
-          to: payload.email,
-          recipientName: payload.name,
-          role: payload.role,
+          to: dbInvite.member.email,
+          recipientName: dbInvite.member.name,
+          role: dbInvite.member.role,
           companyName: getRawStore().companyName,
-          inviterName: "Enter & Post Admin",
-          inviterEmail: "enterandpost02@gmail.com",
+          inviterName: auth.user.fullName,
+          inviterEmail: auth.user.email,
+          inviteToken: dbInvite.inviteToken,
+          hasInitialPassword: dbInvite.provisionedDirectly,
           appUrl: origin,
         });
-        const state = saveQboStoreFast(organizationId);
-        return NextResponse.json({ ...state, inviteEmailResult: mailResult });
+        const state = saveQboStoreFast(
+          organizationId,
+          undefined,
+          allowedOrgIds
+        );
+        state.activeRole = effectiveRole;
+        return NextResponse.json({
+          ...state,
+          inviteEmailResult: mailResult,
+          provisionedDirectly: dbInvite.provisionedDirectly,
+        });
+      }
+      case "update_team_member_role": {
+        await updateTeamMemberRoleInDb({
+          organizationId,
+          email: payload.email,
+          role: payload.role,
+        });
+        updateTeamMemberRoleInStore({
+          memberId: payload.memberId,
+          email: payload.email,
+          role: payload.role,
+        });
+        break;
+      }
+      case "remove_team_member": {
+        await removeTeamMemberFromDb({
+          organizationId,
+          email: payload.email,
+          actingUserId: auth.user.id,
+        });
+        removeTeamMemberFromStore({
+          memberId: payload.memberId,
+          email: payload.email,
+        });
+        break;
       }
       case "resend_invite_email": {
         const rawStore = getRawStore();
@@ -214,21 +412,43 @@ export async function POST(request: Request) {
         if (!member) {
           throw new Error("Team member not found");
         }
+        const reInvite = await provisionOrInviteTeamMemberInDb({
+          organizationId,
+          invitedByUserId: auth.user.id,
+          name: member.name,
+          email: member.email,
+          role: member.role,
+        });
         const origin = new URL(request.url).origin;
         const mailResult = await sendTeamInviteEmail({
           to: member.email,
           recipientName: member.name,
           role: member.role,
           companyName: rawStore.companyName,
-          inviterName: "Enter & Post Admin",
-          inviterEmail: "enterandpost02@gmail.com",
+          inviterName: auth.user.fullName,
+          inviterEmail: auth.user.email,
+          inviteToken: reInvite.inviteToken,
+          hasInitialPassword: reInvite.provisionedDirectly,
           appUrl: origin,
         });
-        const state = saveQboStoreFast(organizationId);
+        const state = saveQboStoreFast(
+          organizationId,
+          undefined,
+          allowedOrgIds
+        );
+        state.activeRole = effectiveRole;
         return NextResponse.json({ ...state, inviteEmailResult: mailResult });
       }
       case "reset_demo": {
-        resetQboStore();
+        resetQboStore(
+          auth.isSuperAdmin
+            ? undefined
+            : {
+                id: auth.user.id,
+                name: auth.user.fullName,
+                email: auth.user.email,
+              }
+        );
         break;
       }
       case "wipe_transactions": {
@@ -242,7 +462,10 @@ export async function POST(request: Request) {
         );
     }
 
-    const state = saveQboStoreFast(organizationId);
+    const state = saveQboStoreFast(organizationId, undefined, allowedOrgIds);
+    if (!isRoleSwitchAction) {
+      state.activeRole = executionRole;
+    }
     return NextResponse.json(state);
   } catch (err) {
     const message =

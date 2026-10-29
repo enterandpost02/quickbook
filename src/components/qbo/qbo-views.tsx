@@ -22,6 +22,7 @@ import {
   Send,
   ShieldAlert,
   Sparkles,
+  Trash2,
   Unlock,
   Upload,
 } from "lucide-react";
@@ -55,6 +56,8 @@ interface ViewProps {
     successMsg?: string
   ) => Promise<void>;
   isSubmitting: boolean;
+  canManageTeam?: boolean;
+  currentUserEmail?: string;
 }
 
 // ============================================================================
@@ -3893,13 +3896,20 @@ export function ReconcileView({ state, runAction, isSubmitting }: ViewProps) {
 // 9. AUDIT LOG, TEAMS & LAUNCH SECURITY VIEW (Phases 7 & 9)
 // ============================================================================
 
-export function AuditLogView({ state, runAction }: ViewProps) {
+export function AuditLogView({
+  state,
+  runAction,
+  canManageTeam,
+  currentUserEmail,
+}: ViewProps) {
   const [subTab, setSubTab] = useState<"audit" | "teams" | "security">("audit");
   const [inviteName, setInviteName] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<"accountant" | "staff" | "owner">(
-    "accountant"
+    "staff"
   );
+  const [invitePassword, setInvitePassword] = useState("");
+  const isOwnerAuth = canManageTeam ?? state.activeRole === "owner";
 
   function exportFullCompanyCsv() {
     const esc = (val: unknown) => {
@@ -4075,17 +4085,18 @@ export function AuditLogView({ state, runAction }: ViewProps) {
         {(() => {
           const validMembers = (state.teamMembers || []).filter(
             (m) =>
+              m.email.toLowerCase() !== "enterandpost02@gmail.com" &&
               m.name !== "Sarah Jenkins" &&
               m.name !== "Arthur Andersen, CPA" &&
               !m.email.includes("bayareacpa.com") &&
               m.email !== "sarah@enterandpost.com" &&
               m.email !== "sarah@craigslandscaping.com"
           );
-          if (validMembers.length <= 1) return null;
+          if (!isOwnerAuth || validMembers.length <= 1) return null;
           return (
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs font-semibold text-slate-600">
-                Active Role:
+                Preview Role:
               </span>
               {Array.from(new Set(validMembers.map((m) => m.role))).map((r) => (
                 <button
@@ -4095,8 +4106,8 @@ export function AuditLogView({ state, runAction }: ViewProps) {
                       "set_active_role",
                       { role: r },
                       r === "accountant"
-                        ? "Switched to Accountant (Read-Only) mode — mutations are now blocked!"
-                        : `Switched to ${r.toUpperCase()} role`
+                        ? "Previewing Accountant (Read-Only) mode — mutations are now blocked!"
+                        : `Previewing ${r.toUpperCase()} role permissions`
                     )
                   }
                   className={`rounded-full px-3 py-1 text-xs font-bold capitalize transition-colors ${
@@ -4115,11 +4126,11 @@ export function AuditLogView({ state, runAction }: ViewProps) {
 
       {/* Sub-navigation */}
       <div className="rounded-xl bg-white border border-slate-200 shadow-2xs overflow-hidden">
-        <div className="flex items-center justify-between border-b border-slate-200 px-5 bg-[#F4F5F8]">
-          <div className="flex gap-6">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-3 sm:px-5 py-1.5 sm:py-0 bg-[#F4F5F8]">
+          <div className="flex gap-4 sm:gap-6 overflow-x-auto max-w-full">
             <button
               onClick={() => setSubTab("audit")}
-              className={`py-3.5 text-xs font-bold border-b-2 transition-colors ${
+              className={`py-2.5 sm:py-3.5 text-xs font-bold border-b-2 whitespace-nowrap transition-colors ${
                 subTab === "audit"
                   ? "border-[#2CA01C] text-[#2CA01C]"
                   : "border-transparent text-slate-600 hover:text-slate-900"
@@ -4129,17 +4140,23 @@ export function AuditLogView({ state, runAction }: ViewProps) {
             </button>
             <button
               onClick={() => setSubTab("teams")}
-              className={`py-3.5 text-xs font-bold border-b-2 transition-colors ${
+              className={`py-2.5 sm:py-3.5 text-xs font-bold border-b-2 whitespace-nowrap transition-colors ${
                 subTab === "teams"
                   ? "border-[#2CA01C] text-[#2CA01C]"
                   : "border-transparent text-slate-600 hover:text-slate-900"
               }`}
             >
-              Team Members &amp; Roles ({state.teamMembers.length})
+              Team Members &amp; Roles (
+              {
+                (state.teamMembers || []).filter(
+                  (m) => m.email.toLowerCase() !== "enterandpost02@gmail.com"
+                ).length
+              }
+              )
             </button>
             <button
               onClick={() => setSubTab("security")}
-              className={`py-3.5 text-xs font-bold border-b-2 transition-colors ${
+              className={`py-2.5 sm:py-3.5 text-xs font-bold border-b-2 whitespace-nowrap transition-colors ${
                 subTab === "security"
                   ? "border-[#2CA01C] text-[#2CA01C]"
                   : "border-transparent text-slate-600 hover:text-slate-900"
@@ -4150,7 +4167,7 @@ export function AuditLogView({ state, runAction }: ViewProps) {
             </button>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 py-1">
             <button
               onClick={exportFullCompanyCsv}
               className="inline-flex items-center gap-1.5 rounded-full bg-[#2CA01C] px-3.5 py-1.5 text-xs font-bold text-white hover:bg-[#248217] shadow-2xs transition-colors"
@@ -4208,173 +4225,280 @@ export function AuditLogView({ state, runAction }: ViewProps) {
           </div>
         )}
 
-        {subTab === "teams" && (
-          <div className="p-5 space-y-5">
-            <div className="flex items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50/70 p-3.5 text-xs text-emerald-950">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#2CA01C] text-white">
-                <Mail className="h-4 w-4" />
+        {subTab === "teams" && (() => {
+          const visibleTeamMembers = (state.teamMembers || []).filter(
+            (m) =>
+              m.email.toLowerCase() !== "enterandpost02@gmail.com" &&
+              m.name !== "Sarah Jenkins" &&
+              m.name !== "Arthur Andersen, CPA" &&
+              !m.email.includes("bayareacpa.com") &&
+              m.email !== "sarah@enterandpost.com" &&
+              m.email !== "sarah@craigslandscaping.com"
+          );
+          const canEditRoster = isOwnerAuth && state.activeRole === "owner";
+
+          return (
+            <div className="p-4 sm:p-5 space-y-5">
+              <div className="flex items-start sm:items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50/70 p-3.5 text-xs text-emerald-950">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#2CA01C] text-white">
+                  <Mail className="h-4 w-4" />
+                </div>
+                <div>
+                  <p className="font-bold text-emerald-900">
+                    Staff Bookkeepers, Accountants &amp; Role-Based Access Control
+                  </p>
+                  <p className="text-[11px] text-emerald-700 leading-relaxed">
+                    Add real Staff Bookkeepers or Read-Only Accountants to work on{" "}
+                    <strong className="text-emerald-950">{state.companyName}</strong>. Set an initial password to grant immediate{" "}
+                    <code className="font-mono bg-emerald-100/80 px-1 rounded">/login</code> access, or leave the password blank to dispatch a 6-digit Email OTP onboarding invite.
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className="font-bold text-emerald-900">
-                  Automated Employee Invitations &amp; RBAC Control
-                </p>
-                <p className="text-[11px] text-emerald-700">
-                  When you invite a new employee or accountant, an official onboarding email is dispatched directly from{" "}
-                  <strong className="font-mono text-emerald-950">enterandpost02@gmail.com</strong> with their assigned role and immediate access link.
-                </p>
+
+              {canEditRoster ? (
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    if (!inviteName.trim() || !inviteEmail.trim()) return;
+                    const trimmedPw = invitePassword.trim();
+                    if (trimmedPw.length > 0 && trimmedPw.length < 8) {
+                      window.alert(
+                        "Initial password must be at least 8 characters (or leave blank to send an Email OTP invite)."
+                      );
+                      return;
+                    }
+                    await runAction(
+                      "invite_team_member",
+                      {
+                        name: inviteName.trim(),
+                        email: inviteEmail.trim(),
+                        role: inviteRole,
+                        initialPassword: trimmedPw || undefined,
+                      },
+                      trimmedPw
+                        ? `Created active ${inviteRole.toUpperCase()} account for ${inviteEmail.trim()} — ready to sign in at /login!`
+                        : `Dispatched Email OTP onboarding invitation to ${inviteEmail.trim()} (${inviteRole.toUpperCase()} role)`
+                    );
+                    setInviteName("");
+                    setInviteEmail("");
+                    setInvitePassword("");
+                  }}
+                  autoComplete="off"
+                  className="space-y-3 rounded-lg bg-slate-50 p-4 border border-slate-200"
+                >
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                    <input
+                      type="text"
+                      value={inviteName}
+                      onChange={(e) => setInviteName(e.target.value)}
+                      placeholder="Full Name (e.g. Jane Doe)"
+                      required
+                      autoComplete="off"
+                      className="rounded border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900"
+                    />
+                    <input
+                      type="email"
+                      value={inviteEmail}
+                      onChange={(e) => setInviteEmail(e.target.value)}
+                      placeholder="Employee / CPA Email"
+                      required
+                      autoComplete="off"
+                      className="rounded border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900"
+                    />
+                    <select
+                      value={inviteRole}
+                      onChange={(e) =>
+                        setInviteRole(
+                          e.target.value as "accountant" | "staff" | "owner"
+                        )
+                      }
+                      className="rounded border border-slate-300 bg-white px-2.5 py-2 text-xs font-semibold text-slate-800"
+                    >
+                      <option value="staff">Staff Bookkeeper (Standard)</option>
+                      <option value="accountant">Accountant (Read-Only Audit)</option>
+                      <option value="owner">Co-Owner (Full Company Admin)</option>
+                    </select>
+                    <input
+                      type="password"
+                      value={invitePassword}
+                      onChange={(e) => setInvitePassword(e.target.value)}
+                      placeholder="Initial Password (optional, 8+ chars)"
+                      minLength={8}
+                      autoComplete="new-password"
+                      className="rounded border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900"
+                    />
+                    <button
+                      type="submit"
+                      className="inline-flex items-center justify-center gap-1.5 rounded-full bg-[#2CA01C] px-4 py-2 text-xs font-bold text-white hover:bg-[#248217] transition-colors"
+                    >
+                      <Send className="h-3.5 w-3.5" />
+                      {invitePassword.trim() ? "Create Staff Login" : "Send OTP Invite"}
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-slate-500">
+                    <strong>Staff Bookkeepers</strong> can enter invoices, bills, bank transactions &amp; journal entries (cannot wipe books, lock periods, or manage staff).{" "}
+                    <strong>Accountants</strong> have strict read-only audit &amp; report export access.
+                  </p>
+                </form>
+              ) : (
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600 flex items-center gap-2">
+                  <Lock className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                  <span>
+                    Only the <strong>Company Owner</strong> can invite, modify roles, or remove team members.
+                  </span>
+                </div>
+              )}
+
+              <div className="overflow-x-auto w-full">
+                <table className="w-full text-left text-xs min-w-[600px]">
+                  <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase">
+                    <tr>
+                      <th className="px-4 py-3">Name</th>
+                      <th className="px-4 py-3">Email</th>
+                      <th className="px-4 py-3">Role &amp; Permissions</th>
+                      <th className="px-4 py-3">Status</th>
+                      <th className="px-4 py-3 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {visibleTeamMembers.map((m) => {
+                      const isCurrentUser =
+                        Boolean(currentUserEmail) &&
+                        m.email.toLowerCase() === currentUserEmail!.toLowerCase();
+
+                      return (
+                        <tr key={m.id} className="hover:bg-slate-50/50">
+                          <td className="px-4 py-3 font-semibold text-slate-900">
+                            {m.name}
+                            {m.role === "owner" && (
+                              <span className="ml-2 inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-[#2CA01C]">
+                                Owner
+                              </span>
+                            )}
+                            {isCurrentUser && (
+                              <span className="ml-1.5 inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
+                                You
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-slate-600 font-mono text-[11px]">
+                            {m.email}
+                          </td>
+                          <td className="px-4 py-3">
+                            {canEditRoster && !isCurrentUser ? (
+                              <select
+                                value={m.role}
+                                onChange={(e) => {
+                                  const nextRole = e.target.value as
+                                    | "owner"
+                                    | "staff"
+                                    | "accountant";
+                                  runAction(
+                                    "update_team_member_role",
+                                    {
+                                      memberId: m.id,
+                                      email: m.email,
+                                      role: nextRole,
+                                    },
+                                    `Updated ${m.name}'s role to ${nextRole.toUpperCase()}`
+                                  );
+                                }}
+                                className="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-bold text-slate-800 focus:border-[#2CA01C] focus:outline-none"
+                              >
+                                <option value="owner">Company Owner</option>
+                                <option value="staff">Staff Bookkeeper</option>
+                                <option value="accountant">
+                                  Accountant (Read-Only)
+                                </option>
+                              </select>
+                            ) : (
+                              <span
+                                className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase ${
+                                  m.role === "owner"
+                                    ? "bg-emerald-50 text-[#2CA01C] border border-emerald-200"
+                                    : m.role === "staff"
+                                    ? "bg-sky-50 text-[#0077C5] border border-sky-200"
+                                    : "bg-slate-100 text-slate-700 border border-slate-200"
+                                }`}
+                              >
+                                {m.role === "accountant"
+                                  ? "Accountant (Read-Only)"
+                                  : m.role === "staff"
+                                  ? "Staff Bookkeeper"
+                                  : "Company Owner"}
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            {m.status === "Invited" ? (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-200 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+                                <Mail className="h-3 w-3" />
+                                Invited (OTP Pending)
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[11px] font-semibold text-[#2CA01C]">
+                                <Check className="h-3 w-3" />
+                                Active
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            {canEditRoster && !isCurrentUser ? (
+                              <div className="inline-flex items-center justify-end gap-1.5">
+                                {m.status === "Invited" && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      runAction(
+                                        "resend_invite_email",
+                                        { memberId: m.id, email: m.email },
+                                        `Resent onboarding invitation email to ${m.email}`
+                                      )
+                                    }
+                                    className="inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
+                                    title="Resend onboarding invitation email"
+                                  >
+                                    <Mail className="h-3 w-3 text-slate-500" />
+                                    Resend
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (
+                                      window.confirm(
+                                        `Remove ${m.name} (${m.email}) from ${state.companyName}? Their access to this company's books will be revoked immediately.`
+                                      )
+                                    ) {
+                                      runAction(
+                                        "remove_team_member",
+                                        { memberId: m.id, email: m.email },
+                                        `Removed ${m.name} (${m.email}) from ${state.companyName}`
+                                      );
+                                    }
+                                  }}
+                                  className="inline-flex items-center gap-1 rounded border border-rose-200 bg-rose-50 px-2 py-1 text-[11px] font-semibold text-rose-700 hover:bg-rose-100 transition-colors"
+                                  title="Revoke access and remove team member"
+                                >
+                                  <Trash2 className="h-3 w-3 text-rose-600" />
+                                  Remove
+                                </button>
+                              </div>
+                            ) : (
+                              <span className="text-[11px] text-slate-400">
+                                {isCurrentUser ? "Current Session" : "—"}
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             </div>
-
-            <form
-              onSubmit={async (e) => {
-                e.preventDefault();
-                if (!inviteName.trim() || !inviteEmail.trim()) return;
-                await runAction(
-                  "invite_team_member",
-                  {
-                    name: inviteName,
-                    email: inviteEmail,
-                    role: inviteRole,
-                  },
-                  `Invitation email dispatched to ${inviteEmail} from enterandpost02@gmail.com (${inviteRole.toUpperCase()} permissions)`
-                );
-                setInviteName("");
-                setInviteEmail("");
-              }}
-              className="space-y-2 rounded-lg bg-slate-50 p-4 border border-slate-200"
-            >
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-                <input
-                  type="text"
-                  value={inviteName}
-                  onChange={(e) => setInviteName(e.target.value)}
-                  placeholder="Employee Full Name (e.g. Jane Doe)"
-                  required
-                  className="rounded border border-slate-300 bg-white px-3 py-2 text-xs"
-                />
-                <input
-                  type="email"
-                  value={inviteEmail}
-                  onChange={(e) => setInviteEmail(e.target.value)}
-                  placeholder="Employee Email Address"
-                  required
-                  className="rounded border border-slate-300 bg-white px-3 py-2 text-xs"
-                />
-                <select
-                  value={inviteRole}
-                  onChange={(e) =>
-                    setInviteRole(
-                      e.target.value as "accountant" | "staff" | "owner"
-                    )
-                  }
-                  className="rounded border border-slate-300 bg-white px-2.5 py-2 text-xs font-semibold text-slate-800"
-                >
-                  <option value="accountant">Accountant (Read-Only Audit)</option>
-                  <option value="staff">Staff Bookkeeper (Standard)</option>
-                  <option value="owner">Company Owner (Full Admin)</option>
-                </select>
-                <button
-                  type="submit"
-                  className="inline-flex items-center justify-center gap-1.5 rounded-full bg-[#2CA01C] px-4 py-2 text-xs font-bold text-white hover:bg-[#248217] transition-colors"
-                >
-                  <Send className="h-3.5 w-3.5" />
-                  Send Invite Email
-                </button>
-              </div>
-              <p className="text-[11px] text-slate-500">
-                Sender: <span className="font-semibold text-slate-700">enterandpost02@gmail.com</span> · The invited user will receive a branded invitation with one-click sign-in.
-              </p>
-            </form>
-
-            <div className="overflow-x-auto w-full">
-              <table className="w-full text-left text-xs min-w-[550px]">
-              <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase">
-                <tr>
-                  <th className="px-4 py-3">Name</th>
-                  <th className="px-4 py-3">Email</th>
-                  <th className="px-4 py-3">Role &amp; Permissions</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {state.teamMembers
-                  .filter(
-                    (m) =>
-                      m.name !== "Sarah Jenkins" &&
-                      m.name !== "Arthur Andersen, CPA" &&
-                      !m.email.includes("bayareacpa.com") &&
-                      m.email !== "sarah@enterandpost.com" &&
-                      m.email !== "sarah@craigslandscaping.com"
-                  )
-                  .map((m) => (
-                  <tr key={m.id} className="hover:bg-slate-50/50">
-                    <td className="px-4 py-3 font-semibold text-slate-900">
-                      {m.name}
-                      {m.email === "enterandpost02@gmail.com" && (
-                        <span className="ml-2 inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-[#2CA01C]">
-                          Admin
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-slate-600 font-mono text-[11px]">
-                      {m.email}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase ${
-                          m.role === "owner"
-                            ? "bg-emerald-50 text-[#2CA01C] border border-emerald-200"
-                            : m.role === "staff"
-                            ? "bg-sky-50 text-[#0077C5] border border-sky-200"
-                            : "bg-slate-100 text-slate-700 border border-slate-200"
-                        }`}
-                      >
-                        {m.role === "accountant"
-                          ? "Accountant (Read-Only)"
-                          : m.role === "staff"
-                          ? "Staff Bookkeeper"
-                          : "Company Owner"}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      {m.status === "Invited" ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-200 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
-                          <Mail className="h-3 w-3" />
-                          Invited (Email Sent)
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[11px] font-semibold text-[#2CA01C]">
-                          <Check className="h-3 w-3" />
-                          Active
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      {m.email !== "enterandpost02@gmail.com" && (
-                        <button
-                          onClick={() =>
-                            runAction(
-                              "resend_invite_email",
-                              { memberId: m.id, email: m.email },
-                              `Resent onboarding invitation to ${m.email} from enterandpost02@gmail.com`
-                            )
-                          }
-                          className="inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
-                          title="Resend invitation email from enterandpost02@gmail.com"
-                        >
-                          <Mail className="h-3 w-3 text-slate-500" />
-                          Resend Email
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            </div>
-          </div>
-        )}
+          );
+        })()}
 
         {subTab === "security" && (
           <div className="p-6 space-y-4">

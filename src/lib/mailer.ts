@@ -10,6 +10,8 @@ export interface SendInviteEmailParams {
   companyName: string;
   inviterName?: string;
   inviterEmail?: string;
+  inviteToken?: string;
+  hasInitialPassword?: boolean;
   appUrl?: string;
 }
 
@@ -21,8 +23,49 @@ export interface SendInviteEmailResult {
   to: string;
   subject: string;
   role: string;
+  inviteLink: string;
   previewSnippet: string;
   error?: string;
+}
+
+export interface SendOtpEmailParams {
+  to: string;
+  recipientName: string;
+  otpCode: string;
+  organizationName: string;
+  expiresInMinutes?: number;
+}
+
+export interface SendOtpEmailResult {
+  success: boolean;
+  messageId?: string;
+  simulated: boolean;
+  from: string;
+  to: string;
+  subject: string;
+  error?: string;
+}
+
+function getSmtpConfig() {
+  const fromEmail =
+    process.env.GMAIL_USER ||
+    process.env.SMTP_USER ||
+    DEFAULT_SENDER_EMAIL;
+  const fromHeader = `"${DEFAULT_SENDER_NAME}" <${fromEmail}>`;
+  const smtpPass =
+    process.env.GMAIL_APP_PASSWORD ||
+    process.env.SMTP_PASS ||
+    process.env.EMAIL_PASSWORD;
+  const smtpHost = process.env.SMTP_HOST || "smtp.gmail.com";
+  const smtpPort = Number(process.env.SMTP_PORT || 465);
+
+  return {
+    fromEmail,
+    fromHeader,
+    smtpPass,
+    smtpHost,
+    smtpPort,
+  };
 }
 
 function getRoleDescription(role: "owner" | "staff" | "accountant"): {
@@ -55,14 +98,119 @@ function getRoleDescription(role: "owner" | "staff" | "accountant"): {
   }
 }
 
+export async function sendSignupOtpEmail(
+  params: SendOtpEmailParams
+): Promise<SendOtpEmailResult> {
+  const { fromEmail, fromHeader, smtpPass, smtpHost, smtpPort } = getSmtpConfig();
+  const expiresMinutes = params.expiresInMinutes ?? 10;
+  const subject = `${params.otpCode} is your Pro E Books verification code`;
+
+  const htmlBody = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>${subject}</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #F4F5F8; margin: 0; padding: 24px; color: #1E252B; }
+    .container { max-width: 560px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; border: 1px solid #E5E7EB; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+    .header { background: #1E252B; padding: 22px 28px; text-align: left; border-bottom: 4px solid #2CA01C; }
+    .header-logo { color: #ffffff; font-size: 20px; font-weight: bold; letter-spacing: -0.5px; }
+    .header-logo span { color: #2CA01C; }
+    .body { padding: 32px 28px; }
+    h1 { font-size: 20px; font-weight: 700; color: #111827; margin: 0 0 12px; }
+    p { font-size: 14px; line-height: 1.6; color: #4B5563; margin: 0 0 16px; }
+    .otp-box { background: #F0FDF4; border: 2px dashed #2CA01C; border-radius: 12px; padding: 20px; text-align: center; margin: 24px 0; }
+    .otp-code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 34px; font-weight: 800; letter-spacing: 8px; color: #166534; }
+    .otp-note { font-size: 12px; color: #6B7280; margin-top: 8px; }
+    .footer { background: #F9FAFB; padding: 18px 28px; border-top: 1px solid #E5E7EB; font-size: 12px; color: #9CA3AF; text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="header-logo">Pro <span>E Books</span></div>
+    </div>
+    <div class="body">
+      <h1>Verify your email address</h1>
+      <p>Hello <strong>${params.recipientName}</strong>,</p>
+      <p>
+        Enter the 6-digit verification code below to verify your email and activate
+        <strong>${params.organizationName}</strong> on Pro E Books:
+      </p>
+      <div class="otp-box">
+        <div class="otp-code">${params.otpCode}</div>
+        <div class="otp-note">Expires in ${expiresMinutes} minutes · Do not share this code with anyone</div>
+      </div>
+      <p style="font-size: 12px; color: #6B7280;">
+        If you did not request a Pro E Books account, you can safely ignore this message.
+      </p>
+    </div>
+    <div class="footer">
+      Sent securely by Pro E Books Cloud Accounting (${fromEmail})
+    </div>
+  </div>
+</body>
+</html>
+  `.trim();
+
+  if (smtpPass) {
+    try {
+      const transporter = nodemailer.createTransport({
+        service: smtpHost.includes("gmail") ? "gmail" : undefined,
+        host: smtpHost,
+        port: smtpPort,
+        secure: smtpPort === 465,
+        auth: {
+          user: fromEmail,
+          pass: smtpPass,
+        },
+      });
+
+      const info = await transporter.sendMail({
+        from: fromHeader,
+        to: params.to,
+        subject,
+        html: htmlBody,
+        text: `Hello ${params.recipientName},\n\nYour Pro E Books verification code for ${params.organizationName} is: ${params.otpCode}\n\nThis code expires in ${expiresMinutes} minutes.`,
+      });
+
+      return {
+        success: true,
+        messageId: info.messageId,
+        simulated: false,
+        from: fromEmail,
+        to: params.to,
+        subject,
+      };
+    } catch (sendError) {
+      console.error("[Mailer] Failed to send OTP via SMTP:", sendError);
+      return {
+        success: true,
+        simulated: true,
+        from: fromEmail,
+        to: params.to,
+        subject,
+        error:
+          sendError instanceof Error ? sendError.message : String(sendError),
+      };
+    }
+  }
+
+  console.log(`[Mailer] Signup OTP dispatched to ${params.to}: ${params.otpCode}`);
+  return {
+    success: true,
+    simulated: true,
+    from: fromEmail,
+    to: params.to,
+    subject,
+  };
+}
+
 export async function sendTeamInviteEmail(
   params: SendInviteEmailParams
 ): Promise<SendInviteEmailResult> {
-  const fromEmail =
-    process.env.GMAIL_USER ||
-    process.env.SMTP_USER ||
-    DEFAULT_SENDER_EMAIL;
-  const fromHeader = `"${DEFAULT_SENDER_NAME}" <${fromEmail}>`;
+  const { fromEmail, fromHeader, smtpPass, smtpHost, smtpPort } = getSmtpConfig();
   const subject = `You've been invited to join ${params.companyName} on Pro E Books`;
   const roleInfo = getRoleDescription(params.role);
 
@@ -71,11 +219,22 @@ export async function sendTeamInviteEmail(
     process.env.NEXT_PUBLIC_APP_URL ||
     "http://localhost:3000";
 
-  const inviteLink = `${baseUrl}/login?email=${encodeURIComponent(
-    params.to
-  )}&invitedBy=${encodeURIComponent(fromEmail)}&company=${encodeURIComponent(
-    params.companyName
-  )}`;
+  const inviterDisplay = params.inviterName || "Your Company Owner";
+  const inviterContact = params.inviterEmail || fromEmail;
+
+  const inviteLink =
+    params.inviteToken && !params.hasInitialPassword
+      ? `${baseUrl}/signup?invite=${encodeURIComponent(
+          params.inviteToken
+        )}&email=${encodeURIComponent(params.to)}&name=${encodeURIComponent(
+          params.recipientName
+        )}`
+      : `${baseUrl}/login`;
+
+  const actionLabel =
+    params.inviteToken && !params.hasInitialPassword
+      ? "Accept Invitation & Verify Account"
+      : "Sign In to Pro E Books";
 
   const htmlBody = `
 <!DOCTYPE html>
@@ -108,7 +267,7 @@ export async function sendTeamInviteEmail(
     <div class="body">
       <h1>Welcome to the team, ${params.recipientName}!</h1>
       <p>
-        <strong>${params.inviterName || "Enter & Post Admin"}</strong> (<a href="mailto:${fromEmail}">${fromEmail}</a>)
+        <strong>${inviterDisplay}</strong> (<a href="mailto:${inviterContact}">${inviterContact}</a>)
         has invited you to access the company ledger for <strong>${params.companyName}</strong>.
       </p>
 
@@ -118,15 +277,15 @@ export async function sendTeamInviteEmail(
       </div>
 
       <div class="btn-container">
-        <a href="${inviteLink}" class="btn">Accept Invitation &amp; Sign In</a>
+        <a href="${inviteLink}" class="btn">${actionLabel}</a>
       </div>
 
       <p style="font-size: 12px; color: #6B7280;">
-        Or sign in directly at <a href="${baseUrl}/login">${baseUrl}/login</a> using your email <strong>${params.to}</strong>.
+        Access link: <a href="${inviteLink}">${inviteLink}</a> using your email <strong>${params.to}</strong>.
       </p>
     </div>
     <div class="footer">
-      This invitation was sent from ${fromEmail} via Pro E Books Team Management.
+      This invitation was dispatched via Pro E Books Team Management (${fromEmail}).
       <br>If you were not expecting this message, you can safely ignore this email.
     </div>
   </div>
@@ -136,22 +295,16 @@ export async function sendTeamInviteEmail(
 
   const previewSnippet = `Invited ${params.recipientName} (${params.to}) as ${roleInfo.title} to ${params.companyName}. Sent from ${fromEmail}.`;
 
-  const gmailPass =
-    process.env.GMAIL_APP_PASSWORD ||
-    process.env.SMTP_PASS ||
-    process.env.EMAIL_PASSWORD;
-
-  // If live SMTP credentials are provided, send through Gmail SMTP
-  if (gmailPass) {
+  if (smtpPass) {
     try {
       const transporter = nodemailer.createTransport({
-        service: "gmail",
-        host: "smtp.gmail.com",
-        port: 465,
-        secure: true,
+        service: smtpHost.includes("gmail") ? "gmail" : undefined,
+        host: smtpHost,
+        port: smtpPort,
+        secure: smtpPort === 465,
         auth: {
           user: fromEmail,
-          pass: gmailPass,
+          pass: smtpPass,
         },
       });
 
@@ -160,7 +313,7 @@ export async function sendTeamInviteEmail(
         to: params.to,
         subject,
         html: htmlBody,
-        text: `Hello ${params.recipientName},\n\nYou have been invited to join ${params.companyName} as ${roleInfo.title}.\n\nSign in here: ${inviteLink}\n\nSent from ${fromEmail}`,
+        text: `Hello ${params.recipientName},\n\n${inviterDisplay} invited you to join ${params.companyName} as ${roleInfo.title}.\n\nContinue here: ${inviteLink}\n\nSent from ${fromEmail}`,
       });
 
       return {
@@ -171,11 +324,11 @@ export async function sendTeamInviteEmail(
         to: params.to,
         subject,
         role: params.role,
+        inviteLink,
         previewSnippet,
       };
     } catch (sendError) {
-      console.error("[Mailer] Failed to send via Gmail SMTP:", sendError);
-      // Fall through to simulated success so team creation succeeds and user gets clear diagnostics
+      console.error("[Mailer] Failed to send via SMTP:", sendError);
       return {
         success: true,
         simulated: true,
@@ -183,6 +336,7 @@ export async function sendTeamInviteEmail(
         to: params.to,
         subject,
         role: params.role,
+        inviteLink,
         previewSnippet: `${previewSnippet} (SMTP fallback: check GMAIL_APP_PASSWORD)`,
         error:
           sendError instanceof Error ? sendError.message : String(sendError),
@@ -190,7 +344,6 @@ export async function sendTeamInviteEmail(
     }
   }
 
-  // Simulated delivery when GMAIL_APP_PASSWORD is not set in environment
   console.log(`[Mailer] Invitation dispatched to ${params.to} from ${fromEmail}:`);
   console.log(`[Mailer] Subject: ${subject}`);
   console.log(`[Mailer] Invite Link: ${inviteLink}`);
@@ -202,6 +355,7 @@ export async function sendTeamInviteEmail(
     to: params.to,
     subject,
     role: params.role,
+    inviteLink,
     previewSnippet,
   };
 }

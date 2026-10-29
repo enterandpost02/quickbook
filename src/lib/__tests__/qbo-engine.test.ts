@@ -19,11 +19,13 @@ import {
   payVendorBill,
   postJournalEntry,
   receiveInvoicePayment,
+  removeTeamMemberFromStore,
   resetQboStore,
   reverseJournalEntry,
   runAiAutoCategorizer,
   setActiveRole,
   setPeriodLockDate,
+  updateTeamMemberRoleInStore,
   wipeAllCompanyTransactions,
   createFreshCompanyData,
 } from "../qbo-store";
@@ -37,8 +39,39 @@ import {
   parseCsvTextToPreview,
 } from "../csv-parser";
 import { BANK_CSV_PRESETS } from "../sample-bank-csvs";
-import { sendTeamInviteEmail, DEFAULT_SENDER_EMAIL } from "../mailer";
-import { DEFAULT_ADMIN, hashPassword, verifyPassword } from "../auth";
+import {
+  sendTeamInviteEmail,
+  sendSignupOtpEmail,
+  DEFAULT_SENDER_EMAIL,
+} from "../mailer";
+import {
+  DEFAULT_ADMIN,
+  createSessionRecordInDb,
+  ensureAdminUserInDb,
+  getOrganizationTeamRosterFromDb,
+  hashPassword,
+  provisionOrInviteTeamMemberInDb,
+  removeTeamMemberFromDb,
+  requestSignupOtp,
+  resolveAuthFromRawToken,
+  updateTeamMemberRoleInDb,
+  verifyPassword,
+  verifySignupOtpRecord,
+} from "../auth";
+import {
+  initializeLedgerForNewOrganization,
+  loadQboStoreFromDb,
+  resetQboDbCacheForTests,
+} from "../qbo-db";
+import {
+  adminCreateOrganizationAndOwner,
+  adminDeleteUser,
+  adminResetUserPassword,
+  adminToggleOrganizationSuspension,
+  adminToggleUserSuspension,
+  getPlatformAdminOverview,
+} from "../admin";
+import { resetDbInstanceForTests } from "../../db";
 
 describe("QuickBooks Double-Entry Accounting Engine & CSV Suite", () => {
   beforeEach(() => {
@@ -712,24 +745,38 @@ describe("QuickBooks Double-Entry Accounting Engine & CSV Suite", () => {
     assert.equal(fresh.accounts.length, 31);
   });
 
-  it("20. Authentication & Employee Mailer: Admin credentials, team invite, and email dispatched from enterandpost02@gmail.com", async () => {
-    // 1. Verify default admin credentials match requirements exactly
+  it("20. Authentication, Super Admin Separation & RBAC: Super Admin removed from customer roster, Owner team controls, and strict role guards", async () => {
+    // 1. Verify Platform Super Admin ("Godfather") credentials match requirements
     assert.equal(DEFAULT_ADMIN.email, "enterandpost02@gmail.com");
     assert.equal(DEFAULT_ADMIN.password, "Standard@1122");
     const hash = hashPassword(DEFAULT_ADMIN.password);
     assert.equal(verifyPassword("Standard@1122", hash), true);
     assert.equal(verifyPassword("WrongPassword", hash), false);
 
-    // 2. Verify seeded store has enterandpost02@gmail.com as primary owner
+    // 2. Verify customer company ledger does NOT contain enterandpost02@gmail.com as owner
     const state = getComputedQboState();
-    const adminMember = state.teamMembers.find(
-      (m) => m.email === "enterandpost02@gmail.com"
+    assert.equal(
+      state.teamMembers.some(
+        (m) => m.email.toLowerCase() === "enterandpost02@gmail.com"
+      ),
+      false,
+      "Super Admin email enterandpost02@gmail.com must NOT be seeded into customer company teamMembers"
     );
-    assert.ok(adminMember, "Owner member with enterandpost02@gmail.com must exist");
-    assert.equal(adminMember.role, "owner");
-    assert.equal(adminMember.status, "Active");
+    const ownerMember = state.teamMembers.find((m) => m.role === "owner");
+    assert.ok(ownerMember, "Customer company must have its own isolated Owner");
+    assert.equal(ownerMember.status, "Active");
 
-    // 3. Invite a new employee
+    // 3. Verify fresh company creation initializes strictly with the buyer's Owner identity
+    const buyerFresh = createFreshCompanyData("Horizon Retail Group LLC", {
+      id: "usr-buyer-1",
+      name: "Elena Rostova",
+      email: "elena@horizonretail.com",
+    });
+    assert.equal(buyerFresh.teamMembers.length, 1);
+    assert.equal(buyerFresh.teamMembers[0].email, "elena@horizonretail.com");
+    assert.equal(buyerFresh.teamMembers[0].role, "owner");
+
+    // 4. Owner invites a Staff Bookkeeper and updates/removes roles
     const newMember = inviteTeamMember({
       name: "Marcus Vance",
       email: "marcus.vance@example.com",
@@ -740,30 +787,38 @@ describe("QuickBooks Double-Entry Accounting Engine & CSV Suite", () => {
     assert.equal(newMember.role, "staff");
     assert.equal(newMember.status, "Invited");
 
-    const updatedState = getComputedQboState();
-    assert.ok(
-      updatedState.teamMembers.some((m) => m.email === "marcus.vance@example.com")
-    );
+    const updatedMember = updateTeamMemberRoleInStore({
+      email: "marcus.vance@example.com",
+      role: "accountant",
+    });
+    assert.equal(updatedMember.role, "accountant");
 
-    // 4. Test email dispatcher sending to new employee from enterandpost02@gmail.com
+    // 5. Test email dispatcher for both OTP and Team Invitations
     assert.equal(DEFAULT_SENDER_EMAIL, "enterandpost02@gmail.com");
+    const otpMail = await sendSignupOtpEmail({
+      to: "elena@horizonretail.com",
+      recipientName: "Elena Rostova",
+      otpCode: "482910",
+      organizationName: "Horizon Retail Group LLC",
+    });
+    assert.equal(otpMail.success, true);
+    assert.ok(otpMail.subject.includes("482910"));
+
     const mailResult = await sendTeamInviteEmail({
       to: "marcus.vance@example.com",
       recipientName: "Marcus Vance",
       role: "staff",
-      companyName: updatedState.companyName,
-      inviterName: "Enter & Post Admin",
-      inviterEmail: "enterandpost02@gmail.com",
-      appUrl: "https://quickbook-phi.vercel.app",
+      companyName: "Horizon Retail Group LLC",
+      inviterName: "Elena Rostova",
+      inviterEmail: "elena@horizonretail.com",
+      inviteToken: "tok_demo_123",
+      appUrl: "https://proebooks.vercel.app",
     });
-
     assert.equal(mailResult.success, true);
-    assert.equal(mailResult.from, "enterandpost02@gmail.com");
     assert.equal(mailResult.to, "marcus.vance@example.com");
     assert.ok(mailResult.subject.includes("invited to join"));
-    assert.ok(mailResult.previewSnippet.includes("enterandpost02@gmail.com"));
 
-    // 5. Verify RBAC prevents Accountant from inviting or altering records
+    // 6. Verify RBAC prevents Accountant from inviting or mutating records
     setActiveRole("accountant");
     assert.throws(() => {
       inviteTeamMember({
@@ -773,7 +828,7 @@ describe("QuickBooks Double-Entry Accounting Engine & CSV Suite", () => {
       });
     }, /Permission denied: Accountant role is read-only/);
 
-    // 6. Verify RBAC prevents Staff from owner-only administrative actions
+    // 7. Verify RBAC prevents Staff from owner-only actions (wipe, lock, invite, remove)
     setActiveRole("staff");
     assert.throws(() => {
       wipeAllCompanyTransactions();
@@ -783,9 +838,367 @@ describe("QuickBooks Double-Entry Accounting Engine & CSV Suite", () => {
       setPeriodLockDate("2026-08-31");
     }, /Permission denied: Only the Company Owner/);
 
+    assert.throws(() => {
+      inviteTeamMember({
+        name: "Unauthorized Staff Invite",
+        email: "unauth@example.com",
+        role: "staff",
+      });
+    }, /Permission denied: Only the Company Owner/);
+
+    assert.throws(() => {
+      removeTeamMemberFromStore({ email: "marcus.vance@example.com" });
+    }, /Permission denied: Only the Company Owner/);
+
     setActiveRole("owner");
-    // Owner can set period lock
+    removeTeamMemberFromStore({ email: "marcus.vance@example.com" });
+    assert.equal(
+      getComputedQboState().teamMembers.some(
+        (m) => m.email === "marcus.vance@example.com"
+      ),
+      false
+    );
     setPeriodLockDate("2026-08-31");
     assert.equal(getComputedQboState().lockedThroughDate, "2026-08-31");
+  });
+
+  it("21. 2-Step Email OTP Buyer Signup: OTP generation, attempt tracking, verification, and clean isolated Owner organization", async () => {
+    const prevDbUrl = process.env.DATABASE_URL;
+    const prevPgDir = process.env.PGLITE_DATA_DIR;
+    const prevGmailPw = process.env.GMAIL_APP_PASSWORD;
+    process.env.DATABASE_URL = "";
+    process.env.PGLITE_DATA_DIR = "memory://";
+    delete process.env.GMAIL_APP_PASSWORD;
+    await resetQboDbCacheForTests();
+    await resetDbInstanceForTests();
+
+    try {
+      await ensureAdminUserInDb();
+
+      // 1. Block registering Super Admin email on customer signup
+      const blockedAdmin = await requestSignupOtp({
+        fullName: "Fake Admin",
+        email: "enterandpost02@gmail.com",
+        password: "Password@123",
+        organizationName: "Fake Org",
+      });
+      assert.equal(blockedAdmin.ok, false);
+      assert.ok(blockedAdmin.error?.includes("reserved"));
+
+      // 2. Request OTP for a genuine software buyer (Owner)
+      const otpReq = await requestSignupOtp({
+        fullName: "Nadia Khan",
+        email: "nadia@sterlingconsulting.io",
+        password: "StrongPassword@2026",
+        organizationName: "Sterling Consulting Partners LLC",
+        baseCurrency: "USD",
+      });
+      assert.equal(otpReq.ok, true);
+      assert.ok(
+        otpReq.simulatedOtpCode && /^\d{6}$/.test(otpReq.simulatedOtpCode),
+        "Simulated 6-digit OTP code must be returned when SMTP is unconfigured"
+      );
+
+      // 3. Reject incorrect OTP code and track remaining attempts
+      const wrongAttempt = await verifySignupOtpRecord({
+        email: "nadia@sterlingconsulting.io",
+        otpCode: otpReq.simulatedOtpCode === "000000" ? "111111" : "000000",
+      });
+      assert.equal(wrongAttempt.ok, false);
+      assert.ok(wrongAttempt.error?.includes("Invalid verification code"));
+
+      // 4. Verify with exact 6-digit OTP code
+      const verified = await verifySignupOtpRecord({
+        email: "nadia@sterlingconsulting.io",
+        otpCode: otpReq.simulatedOtpCode!,
+      });
+      assert.equal(verified.ok, true);
+      assert.ok(verified.user);
+      assert.ok(verified.organization);
+      assert.equal(verified.role, "owner");
+      assert.equal(verified.joinedExistingOrg, false);
+      assert.equal(verified.user.emailVerified, true);
+      assert.equal(verified.user.isSuperAdmin, false);
+      assert.equal(
+        verified.organization.name,
+        "Sterling Consulting Partners LLC"
+      );
+
+      // Initialize new Owner's fresh ledger and verify 0 transactions & NO Super Admin in roster
+      await initializeLedgerForNewOrganization({
+        organization: {
+          id: verified.organization.id,
+          name: verified.organization.name,
+          slug: verified.organization.slug,
+        },
+        ownerInfo: {
+          id: verified.user.id,
+          name: verified.user.fullName,
+          email: verified.user.email,
+        },
+        template: "empty",
+      });
+
+      const { state } = await loadQboStoreFromDb(verified.organization.id, {
+        allowedOrgIds: [verified.organization.id],
+      });
+      assert.equal(state.companyName, "Sterling Consulting Partners LLC");
+      assert.equal(state.journalEntries.length, 0);
+      assert.equal(state.accounts.length, 31);
+      assert.equal(state.teamMembers.length, 1);
+      assert.equal(state.teamMembers[0].email, "nadia@sterlingconsulting.io");
+      assert.equal(state.teamMembers[0].role, "owner");
+      assert.equal(
+        state.teamMembers.some(
+          (m) => m.email.toLowerCase() === "enterandpost02@gmail.com"
+        ),
+        false
+      );
+
+      // 5. Reject duplicate signup for already-verified email
+      const dupReq = await requestSignupOtp({
+        fullName: "Nadia Khan",
+        email: "nadia@sterlingconsulting.io",
+        password: "StrongPassword@2026",
+        organizationName: "Another Org",
+      });
+      assert.equal(dupReq.ok, false);
+      assert.ok(dupReq.error?.includes("already exists"));
+    } finally {
+      await resetQboDbCacheForTests();
+      await resetDbInstanceForTests();
+      if (prevDbUrl === undefined) delete process.env.DATABASE_URL;
+      else process.env.DATABASE_URL = prevDbUrl;
+      if (prevPgDir === undefined) delete process.env.PGLITE_DATA_DIR;
+      else process.env.PGLITE_DATA_DIR = prevPgDir;
+      if (prevGmailPw !== undefined) process.env.GMAIL_APP_PASSWORD = prevGmailPw;
+    }
+  });
+
+  it("22. Owner Staff & Accountant Provisioning: Direct password creation, OTP invite onboarding, role updates, and session RBAC", async () => {
+    const prevDbUrl = process.env.DATABASE_URL;
+    const prevPgDir = process.env.PGLITE_DATA_DIR;
+    const prevGmailPw = process.env.GMAIL_APP_PASSWORD;
+    process.env.DATABASE_URL = "";
+    process.env.PGLITE_DATA_DIR = "memory://";
+    delete process.env.GMAIL_APP_PASSWORD;
+    await resetQboDbCacheForTests();
+    await resetDbInstanceForTests();
+
+    try {
+      await ensureAdminUserInDb();
+
+      // Create Owner + Company
+      const ownerSetup = await adminCreateOrganizationAndOwner({
+        organizationName: "Vertex Architecture Studio",
+        ownerName: "David Chen",
+        ownerEmail: "david@vertexarch.com",
+        ownerPassword: "OwnerPassword@123",
+      });
+
+      // 1. Owner creates a Staff Bookkeeper with an immediate login password
+      const staffProvision = await provisionOrInviteTeamMemberInDb({
+        organizationId: ownerSetup.organizationId,
+        invitedByUserId: ownerSetup.userId,
+        name: "Maya Lin",
+        email: "maya.staff@vertexarch.com",
+        role: "staff",
+        initialPassword: "StaffPassword@123",
+      });
+      assert.equal(staffProvision.provisionedDirectly, true);
+      assert.equal(staffProvision.member.status, "Active");
+      assert.ok(staffProvision.member.id);
+
+      // Verify Staff Bookkeeper session authenticates strictly as 'staff' for Vertex Architecture Studio
+      const staffSession = await createSessionRecordInDb(
+        staffProvision.member.id,
+        ownerSetup.organizationId
+      );
+      const staffAuth = await resolveAuthFromRawToken(staffSession.rawToken);
+      assert.ok(staffAuth);
+      assert.equal(staffAuth.isSuperAdmin, false);
+      assert.equal(staffAuth.role, "staff");
+      assert.equal(staffAuth.organization.id, ownerSetup.organizationId);
+      assert.equal(staffAuth.memberships.length, 1);
+
+      // 2. Owner invites an external Accountant via Email OTP invitation link (no initial password)
+      const cpaInvite = await provisionOrInviteTeamMemberInDb({
+        organizationId: ownerSetup.organizationId,
+        invitedByUserId: ownerSetup.userId,
+        name: "Robert Miller, CPA",
+        email: "robert@millercpa.org",
+        role: "accountant",
+      });
+      assert.equal(cpaInvite.provisionedDirectly, false);
+      assert.equal(cpaInvite.member.status, "Invited");
+      assert.ok(cpaInvite.inviteToken);
+
+      // Accountant completes 2-step OTP verification using the invite token
+      const cpaOtpReq = await requestSignupOtp({
+        fullName: "Robert Miller, CPA",
+        email: "robert@millercpa.org",
+        password: "CpaSecurePassword@99",
+        inviteToken: cpaInvite.inviteToken,
+      });
+      assert.equal(cpaOtpReq.ok, true);
+      assert.equal(cpaOtpReq.invitedRole, "accountant");
+      assert.equal(cpaOtpReq.organizationName, "Vertex Architecture Studio");
+
+      const cpaVerified = await verifySignupOtpRecord({
+        email: "robert@millercpa.org",
+        otpCode: cpaOtpReq.simulatedOtpCode!,
+      });
+      assert.equal(cpaVerified.ok, true);
+      assert.equal(cpaVerified.joinedExistingOrg, true);
+      assert.equal(cpaVerified.role, "accountant");
+      assert.equal(cpaVerified.organization?.id, ownerSetup.organizationId);
+
+      // 3. Roster now shows Owner + Active Staff + Active Accountant (and NO Super Admin)
+      const roster = await getOrganizationTeamRosterFromDb(
+        ownerSetup.organizationId
+      );
+      assert.equal(roster.length, 3);
+      assert.equal(
+        roster.some((m) => m.email === "enterandpost02@gmail.com"),
+        false
+      );
+
+      // 4. Owner updates Staff role to Accountant, then removes external CPA
+      await updateTeamMemberRoleInDb({
+        organizationId: ownerSetup.organizationId,
+        email: "maya.staff@vertexarch.com",
+        role: "accountant",
+      });
+      const updatedStaffAuth = await resolveAuthFromRawToken(
+        staffSession.rawToken
+      );
+      assert.equal(updatedStaffAuth?.role, "accountant");
+
+      await removeTeamMemberFromDb({
+        organizationId: ownerSetup.organizationId,
+        email: "robert@millercpa.org",
+        actingUserId: ownerSetup.userId,
+      });
+      const rosterAfterRemove = await getOrganizationTeamRosterFromDb(
+        ownerSetup.organizationId
+      );
+      assert.equal(rosterAfterRemove.length, 2);
+    } finally {
+      await resetQboDbCacheForTests();
+      await resetDbInstanceForTests();
+      if (prevDbUrl === undefined) delete process.env.DATABASE_URL;
+      else process.env.DATABASE_URL = prevDbUrl;
+      if (prevPgDir === undefined) delete process.env.PGLITE_DATA_DIR;
+      else process.env.PGLITE_DATA_DIR = prevPgDir;
+      if (prevGmailPw !== undefined) process.env.GMAIL_APP_PASSWORD = prevGmailPw;
+    }
+  });
+
+  it("23. Godfather Super Admin & Multi-Tenant Isolation: Global overview, tenant boundary enforcement, suspension, and password reset", async () => {
+    const prevDbUrl = process.env.DATABASE_URL;
+    const prevPgDir = process.env.PGLITE_DATA_DIR;
+    process.env.DATABASE_URL = "";
+    process.env.PGLITE_DATA_DIR = "memory://";
+    await resetQboDbCacheForTests();
+    await resetDbInstanceForTests();
+
+    try {
+      const godfather = await ensureAdminUserInDb();
+      assert.equal(godfather.user.email, "enterandpost02@gmail.com");
+      assert.equal(godfather.user.isSuperAdmin, true);
+
+      // Create two completely separate Customer Owners (Tenant A & Tenant B)
+      const tenantA = await adminCreateOrganizationAndOwner({
+        organizationName: "Alpha Logistics Corp",
+        ownerName: "Owner Alpha",
+        ownerEmail: "alpha@logistics.io",
+        ownerPassword: "AlphaPassword@11",
+      });
+      const tenantB = await adminCreateOrganizationAndOwner({
+        organizationName: "Beta Medical Supplies",
+        ownerName: "Owner Beta",
+        ownerEmail: "beta@medical.io",
+        ownerPassword: "BetaPassword@22",
+      });
+
+      // 1. Multi-Tenant Isolation: Tenant A only sees Alpha Logistics Corp, NEVER Beta Medical Supplies
+      const sessionA = await createSessionRecordInDb(
+        tenantA.userId,
+        tenantA.organizationId
+      );
+      const authA = await resolveAuthFromRawToken(sessionA.rawToken);
+      assert.ok(authA);
+      assert.equal(authA.isSuperAdmin, false);
+      assert.equal(authA.memberships.length, 1);
+      assert.equal(authA.memberships[0].organization.id, tenantA.organizationId);
+
+      const loadedForA = await loadQboStoreFromDb(tenantA.organizationId, {
+        allowedOrgIds: authA.memberships.map((m) => m.organization.id),
+      });
+      assert.equal(loadedForA.state.organizations?.length, 1);
+      assert.equal(
+        loadedForA.state.organizations?.[0].name,
+        "Alpha Logistics Corp"
+      );
+
+      // 2. Godfather Super Admin session sees ALL organizations across the entire software
+      const godfatherSession = await createSessionRecordInDb(
+        godfather.user.id,
+        tenantA.organizationId
+      );
+      const godfatherAuth = await resolveAuthFromRawToken(
+        godfatherSession.rawToken
+      );
+      assert.ok(godfatherAuth);
+      assert.equal(godfatherAuth.isSuperAdmin, true);
+      assert.ok(godfatherAuth.memberships.length >= 2);
+
+      const overview = await getPlatformAdminOverview();
+      assert.ok(
+        overview.organizations.some((o) => o.id === tenantA.organizationId)
+      );
+      assert.ok(
+        overview.organizations.some((o) => o.id === tenantB.organizationId)
+      );
+      assert.ok(overview.kpis.totalOwners >= 2);
+
+      // 3. Godfather suspends Tenant A user -> Tenant A's active session is immediately revoked
+      await adminToggleUserSuspension(tenantA.userId, true);
+      const revokedAuthA = await resolveAuthFromRawToken(sessionA.rawToken);
+      assert.equal(revokedAuthA, null);
+
+      // Reactivate Tenant A user and test Organization-level suspension
+      await adminToggleUserSuspension(tenantA.userId, false);
+      const sessionA2 = await createSessionRecordInDb(
+        tenantA.userId,
+        tenantA.organizationId
+      );
+      assert.ok(await resolveAuthFromRawToken(sessionA2.rawToken));
+
+      await adminToggleOrganizationSuspension(tenantA.organizationId, true);
+      assert.equal(await resolveAuthFromRawToken(sessionA2.rawToken), null);
+      await adminToggleOrganizationSuspension(tenantA.organizationId, false);
+      assert.ok(await resolveAuthFromRawToken(sessionA2.rawToken));
+
+      // 4. Godfather resets Tenant B Owner's password
+      await adminResetUserPassword(tenantB.userId, "NewResetPass@2026");
+
+      // 5. Godfather cannot suspend or delete the Super Admin account itself
+      await assert.rejects(
+        () => adminToggleUserSuspension(godfather.user.id, true),
+        /Cannot suspend the Platform Super Administrator/
+      );
+      await assert.rejects(
+        () => adminDeleteUser(godfather.user.id),
+        /Cannot delete the Platform Super Administrator/
+      );
+    } finally {
+      await resetQboDbCacheForTests();
+      await resetDbInstanceForTests();
+      if (prevDbUrl === undefined) delete process.env.DATABASE_URL;
+      else process.env.DATABASE_URL = prevDbUrl;
+      if (prevPgDir === undefined) delete process.env.PGLITE_DATA_DIR;
+      else process.env.PGLITE_DATA_DIR = prevPgDir;
+    }
   });
 });

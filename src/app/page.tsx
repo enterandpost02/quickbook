@@ -6,7 +6,7 @@ export const instant = false;
 export default async function HomePage() {
   const auth = await getCurrentAuth();
   if (auth) {
-    redirect("/dashboard");
+    redirect(auth.isSuperAdmin ? "/admin" : "/dashboard");
   } else {
     redirect("/login");
   }

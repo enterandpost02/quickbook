@@ -7,6 +7,7 @@ import {
   journalEntries,
   journalLines,
   organizationLedgerState,
+  organizationMembers,
   organizations,
 } from "@/db/schema";
 import {
@@ -17,14 +18,19 @@ import {
   hydrateQboStore,
   resetQboStore,
   type ComputedQboState,
+  type InitialOwnerInfo,
   type QboStoreData,
 } from "@/lib/qbo-store";
-import { ensureAdminUserInDb } from "@/lib/auth";
+import {
+  ensureAdminUserInDb,
+  getOrganizationTeamRosterFromDb,
+  isSuperAdminEmail,
+} from "@/lib/auth";
 
 const DEFAULT_ORG_SLUG = "craigs-design-and-landscaping";
 export const ACTIVE_ORG_COOKIE = "qbo_active_org_id";
 
-type OrgSummary = { id: string; name: string; slug: string };
+export type OrgSummary = { id: string; name: string; slug: string };
 
 type GlobalMultiOrgCache = {
   initialized?: boolean;
@@ -48,6 +54,28 @@ function getSyncQueueMap(): Map<string, Promise<void>> {
     globalCache.syncQueueByOrgId = new Map();
   }
   return globalCache.syncQueueByOrgId;
+}
+
+export async function resetQboDbCacheForTests(): Promise<void> {
+  if (globalCache.initPromise) {
+    await globalCache.initPromise.catch(() => {});
+  }
+  if (globalCache.syncQueueByOrgId) {
+    await Promise.allSettled(Array.from(globalCache.syncQueueByOrgId.values()));
+  }
+  globalCache.initialized = false;
+  globalCache.initPromise = undefined;
+  globalCache.orgs = undefined;
+  globalCache.ledgersByOrgId = new Map();
+  globalCache.syncQueueByOrgId = new Map();
+}
+
+export function evictOrganizationFromCache(organizationId: string): void {
+  if (globalCache.orgs) {
+    globalCache.orgs = globalCache.orgs.filter((o) => o.id !== organizationId);
+  }
+  getLedgersMap().delete(organizationId);
+  getSyncQueueMap().delete(organizationId);
 }
 
 function slugifyCompanyName(name: string): string {
@@ -80,12 +108,41 @@ export async function setActiveOrgCookieSafe(orgId: string): Promise<void> {
   }
 }
 
+function sanitizeLegacyTeamMembers(ledger: QboStoreData): void {
+  if (!ledger.teamMembers) {
+    ledger.teamMembers = [];
+  }
+  ledger.teamMembers = ledger.teamMembers.filter(
+    (m) =>
+      !isSuperAdminEmail(m.email) &&
+      m.name !== "Sarah Jenkins" &&
+      m.name !== "Arthur Andersen, CPA" &&
+      !m.email.includes("bayareacpa.com") &&
+      m.email !== "sarah@enterandpost.com" &&
+      m.email !== "sarah@craigslandscaping.com"
+  );
+  if (ledger.teamMembers.length === 0) {
+    ledger.teamMembers = [
+      {
+        id: "tm-1",
+        name: "Company Owner",
+        email: "owner@company.local",
+        role: "owner",
+        status: "Active",
+      },
+    ];
+  }
+}
+
 /**
- * Warms the in-memory multi-company cache from Supabase PostgreSQL once per server lifecycle.
- * After initial warm-up, reads and mutations execute in < 2ms with background write-behind to Supabase.
+ * Warms the in-memory multi-company cache from PostgreSQL once per server lifecycle.
  */
 async function ensureCacheInitialized(): Promise<void> {
-  if (globalCache.initialized && globalCache.orgs && globalCache.orgs.length > 0) {
+  if (
+    globalCache.initialized &&
+    globalCache.orgs &&
+    globalCache.orgs.length > 0
+  ) {
     return;
   }
   if (globalCache.initPromise) {
@@ -97,7 +154,10 @@ async function ensureCacheInitialized(): Promise<void> {
     try {
       await ensureAdminUserInDb();
     } catch (authInitErr) {
-      console.warn("[AuthInit] Warning: Could not ensure default admin in DB:", authInitErr);
+      console.warn(
+        "[AuthInit] Warning: Could not ensure default admin in DB:",
+        authInitErr
+      );
     }
     const db = await getDb();
     const [allOrgs, allSnapshots] = await Promise.all([
@@ -139,36 +199,7 @@ async function ensureCacheInitialized(): Promise<void> {
       for (const snap of allSnapshots) {
         if (snap.stateJson) {
           const ledger = snap.stateJson;
-          if (ledger.teamMembers) {
-            ledger.teamMembers = ledger.teamMembers.filter(
-              (m) =>
-                m.name !== "Sarah Jenkins" &&
-                m.name !== "Arthur Andersen, CPA" &&
-                !m.email.includes("bayareacpa.com") &&
-                m.email !== "sarah@enterandpost.com" &&
-                m.email !== "sarah@craigslandscaping.com"
-            );
-            for (const member of ledger.teamMembers) {
-              if (
-                member.role === "owner" &&
-                (member.name === "Craig Carlson" || member.email.includes("craig"))
-              ) {
-                member.name = "Enter & Post Admin";
-                member.email = "enterandpost02@gmail.com";
-              }
-            }
-            if (ledger.teamMembers.length === 0) {
-              ledger.teamMembers = [
-                {
-                  id: "tm-1",
-                  name: "Enter & Post Admin",
-                  email: "enterandpost02@gmail.com",
-                  role: "owner",
-                  status: "Active",
-                },
-              ];
-            }
-          }
+          sanitizeLegacyTeamMembers(ledger);
           ledgersMap.set(snap.organizationId, ledger);
         }
       }
@@ -196,10 +227,46 @@ async function ensureCacheInitialized(): Promise<void> {
 }
 
 /**
- * Loads the active organization's QuickBooks store in < 2ms from the warm cache
- * (hydrating from Supabase on cold start).
+ * Registers a newly created organization (e.g. from OTP Signup or Admin Console)
+ * immediately into the warm cache and persists its fresh ledger to PostgreSQL.
  */
-export async function loadQboStoreFromDb(requestedOrgId?: string): Promise<{
+export async function initializeLedgerForNewOrganization(input: {
+  organization: OrgSummary;
+  ownerInfo: InitialOwnerInfo;
+  template?: "empty" | "sample";
+}): Promise<QboStoreData> {
+  const initialData =
+    input.template === "sample"
+      ? createInitialSeedData(input.organization.name, input.ownerInfo)
+      : createFreshCompanyData(input.organization.name, input.ownerInfo);
+
+  const cloned = structuredClone(initialData);
+  // Pre-seed ledgersMap before cache init so ensureCacheInitialized doesn't synthesize a duplicate fallback
+  getLedgersMap().set(input.organization.id, cloned);
+
+  await ensureCacheInitialized();
+
+  const existingOrgs = globalCache.orgs ?? [];
+  if (!existingOrgs.some((o) => o.id === input.organization.id)) {
+    globalCache.orgs = [...existingOrgs, input.organization];
+  }
+  getLedgersMap().set(input.organization.id, cloned);
+
+  await enqueueBackgroundDbSync(input.organization.id, cloned);
+  return cloned;
+}
+
+/**
+ * Loads the requested organization's Pro E Books store, keeping team roster synced
+ * with PostgreSQL `organization_members` & `team_invitations` and scoping visible
+ * organizations to `allowedOrgIds` when specified.
+ */
+export async function loadQboStoreFromDb(
+  requestedOrgId?: string,
+  options?: {
+    allowedOrgIds?: string[];
+  }
+): Promise<{
   organizationId: string;
   state: ComputedQboState;
   storageMode: "cloud-postgres" | "local-pglite";
@@ -210,11 +277,49 @@ export async function loadQboStoreFromDb(requestedOrgId?: string): Promise<{
     ? "cloud-postgres"
     : "local-pglite";
 
-  const allOrgs = globalCache.orgs ?? [];
+  let allOrgs = globalCache.orgs ?? [];
   const cookieOrgId = await getActiveOrgCookieSafe();
   const targetOrgId = requestedOrgId || cookieOrgId;
+
+  // If targetOrgId was just created in DB and isn't in cache yet, fetch it on demand
+  if (targetOrgId && !allOrgs.some((o) => o.id === targetOrgId)) {
+    const db = await getDb();
+    const [dbOrg] = await db
+      .select()
+      .from(organizations)
+      .where(eq(organizations.id, targetOrgId))
+      .limit(1);
+    if (dbOrg) {
+      const summary: OrgSummary = {
+        id: dbOrg.id,
+        name: dbOrg.name,
+        slug: dbOrg.slug,
+      };
+      allOrgs = [...allOrgs, summary];
+      globalCache.orgs = allOrgs;
+
+      const [dbSnap] = await db
+        .select()
+        .from(organizationLedgerState)
+        .where(eq(organizationLedgerState.organizationId, dbOrg.id))
+        .limit(1);
+      if (dbSnap?.stateJson) {
+        sanitizeLegacyTeamMembers(dbSnap.stateJson);
+        getLedgersMap().set(dbOrg.id, dbSnap.stateJson);
+      }
+    }
+  }
+
+  const allowedSet = options?.allowedOrgIds
+    ? new Set(options.allowedOrgIds)
+    : null;
+  const scopedOrgs = allowedSet
+    ? allOrgs.filter((o) => allowedSet.has(o.id))
+    : allOrgs;
+
+  const candidateList = scopedOrgs.length > 0 ? scopedOrgs : allOrgs;
   const activeOrg =
-    allOrgs.find((o) => o.id === targetOrgId) ?? allOrgs[0];
+    candidateList.find((o) => o.id === targetOrgId) ?? candidateList[0];
 
   const ledgersMap = getLedgersMap();
   let orgData = ledgersMap.get(activeOrg.id);
@@ -226,6 +331,18 @@ export async function loadQboStoreFromDb(requestedOrgId?: string): Promise<{
     ledgersMap.set(activeOrg.id, orgData);
   }
 
+  // Synchronize teamMembers with real PostgreSQL memberships & pending invitations
+  try {
+    const dbRoster = await getOrganizationTeamRosterFromDb(activeOrg.id);
+    if (dbRoster.length > 0) {
+      orgData.teamMembers = dbRoster;
+    } else {
+      sanitizeLegacyTeamMembers(orgData);
+    }
+  } catch {
+    sanitizeLegacyTeamMembers(orgData);
+  }
+
   orgData.companyName = activeOrg.name;
   hydrateQboStore(orgData);
 
@@ -235,21 +352,23 @@ export async function loadQboStoreFromDb(requestedOrgId?: string): Promise<{
     state: {
       ...computed,
       activeOrganizationId: activeOrg.id,
-      organizations: allOrgs,
+      organizations: scopedOrgs,
     },
     storageMode,
   };
 }
 
 /**
- * Creates a brand-new isolated company, updates the in-memory cache immediately,
- * and persists to Supabase in the background.
+ * Creates a brand-new isolated company for an authenticated Owner (or Super Admin),
+ * binds their ownership in `organization_members`, updates the cache, and persists to PostgreSQL.
  */
 export async function createOrganizationInDb(input: {
   name: string;
   template: "empty" | "sample";
   industry?: string;
   taxId?: string;
+  ownerUserId?: string;
+  ownerInfo?: InitialOwnerInfo;
 }): Promise<string> {
   await ensureCacheInitialized();
   const db = await getDb();
@@ -259,14 +378,14 @@ export async function createOrganizationInDb(input: {
 
   const initialData =
     input.template === "sample"
-      ? createInitialSeedData(cleanName)
-      : createFreshCompanyData(cleanName);
+      ? createInitialSeedData(cleanName, input.ownerInfo)
+      : createFreshCompanyData(cleanName, input.ownerInfo);
 
   if (input.industry || input.taxId) {
     initialData.auditLogs.unshift({
       id: `aud-profile-${Date.now()}`,
       timestamp: new Date().toISOString(),
-      user: "Business Owner (Owner)",
+      user: `${input.ownerInfo?.name || "Company Owner"} (OWNER)`,
       action: "Company Profile Configured",
       details: [
         input.industry ? `Industry: ${input.industry}` : "",
@@ -285,8 +404,19 @@ export async function createOrganizationInDb(input: {
       baseCurrency: "USD",
       fiscalYearStartMonth: 1,
       lockedThroughDate: initialData.lockedThroughDate,
+      ownerEmail: input.ownerInfo?.email?.toLowerCase() ?? null,
+      isSuspended: false,
+      planStatus: "active",
     })
     .returning();
+
+  if (input.ownerUserId) {
+    await db.insert(organizationMembers).values({
+      organizationId: newOrg.id,
+      userId: input.ownerUserId,
+      role: "owner",
+    });
+  }
 
   const summary: OrgSummary = {
     id: newOrg.id,
@@ -307,44 +437,51 @@ export async function createOrganizationInDb(input: {
 
 /**
  * Updates the in-memory cache immediately (< 1ms) and schedules a non-blocking
- * background flush to Supabase PostgreSQL so UI actions feel instantaneous.
+ * background flush to PostgreSQL, scoping `organizations` to `allowedOrgIds` if provided.
  */
 export function saveQboStoreFast(
   organizationId: string,
-  customData?: QboStoreData
+  customData?: QboStoreData,
+  allowedOrgIds?: string[]
 ): ComputedQboState {
   const data = customData ?? getRawStore();
   const cloned = structuredClone(data);
   getLedgersMap().set(organizationId, cloned);
 
-  // Fire-and-forget background sync to Supabase
   enqueueBackgroundDbSync(organizationId, cloned);
+
+  const allOrgs = globalCache.orgs ?? [];
+  const allowedSet = allowedOrgIds ? new Set(allowedOrgIds) : null;
+  const scopedOrgs = allowedSet
+    ? allOrgs.filter((o) => allowedSet.has(o.id))
+    : allOrgs;
 
   const computed = getComputedQboState();
   return {
     ...computed,
     activeOrganizationId: organizationId,
-    organizations: globalCache.orgs ?? [],
+    organizations: scopedOrgs,
   };
 }
 
 function enqueueBackgroundDbSync(
   organizationId: string,
   snapshot: QboStoreData
-): void {
+): Promise<void> {
   const queueMap = getSyncQueueMap();
   const prev = queueMap.get(organizationId) ?? Promise.resolve();
   const next = prev
     .catch(() => {})
     .then(() => persistQboStoreToDb(organizationId, snapshot))
     .catch((err) => {
-      console.error("[qbo-db] Background Supabase sync error:", err);
+      console.error("[qbo-db] Background PostgreSQL sync error:", err);
     });
   queueMap.set(organizationId, next);
+  return next;
 }
 
 /**
- * Flushes the organization's state to PostgreSQL (`organization_ledger_state`,
+ * Atomically flushes the organization's state to PostgreSQL (`organization_ledger_state`,
  * `accounts`, `journal_entries`, `journal_lines`, `bank_transactions`).
  */
 export async function persistQboStoreToDb(
@@ -356,115 +493,104 @@ export async function persistQboStoreToDb(
   const orgId = organizationId;
   const pk = (rawId: string) => `${orgId}:${rawId}`;
 
-  // 1. Single-query Upsert of JSONB snapshot (fastest durability guarantee)
-  await db
-    .insert(organizationLedgerState)
-    .values({
-      organizationId: orgId,
-      stateJson: data,
-      updatedAt: new Date(),
-    })
-    .onConflictDoUpdate({
-      target: organizationLedgerState.organizationId,
-      set: {
+  await db.transaction(async (tx) => {
+    await tx
+      .insert(organizationLedgerState)
+      .values({
+        organizationId: orgId,
         stateJson: data,
         updatedAt: new Date(),
-      },
-    });
+      })
+      .onConflictDoUpdate({
+        target: organizationLedgerState.organizationId,
+        set: {
+          stateJson: data,
+          updatedAt: new Date(),
+        },
+      });
 
-  // 2. Sync relational tables with minimal round-trips via Promise.all
-  await Promise.all([
-    db.delete(journalLines).where(eq(journalLines.organizationId, orgId)),
-    db
+    await tx
+      .delete(journalLines)
+      .where(eq(journalLines.organizationId, orgId));
+    await tx
       .delete(bankTransactions)
-      .where(eq(bankTransactions.organizationId, orgId)),
-  ]);
-  await Promise.all([
-    db.delete(journalEntries).where(eq(journalEntries.organizationId, orgId)),
-    db.delete(accounts).where(eq(accounts.organizationId, orgId)),
-  ]);
+      .where(eq(bankTransactions.organizationId, orgId));
+    await tx
+      .delete(journalEntries)
+      .where(eq(journalEntries.organizationId, orgId));
+    await tx.delete(accounts).where(eq(accounts.organizationId, orgId));
 
-  if (data.accounts.length > 0) {
-    await db.insert(accounts).values(
-      data.accounts.map((a) => ({
-        id: pk(a.id),
-        organizationId: orgId,
-        code: a.code,
-        name: a.name,
-        type: a.type,
-        detailType: a.detailType,
-        normalBalance: a.normalBalance,
-        bankBalanceCents: a.bankBalanceCents ?? null,
-        isActive: a.isActive,
-      }))
-    );
-  }
-
-  const insertTasks: Promise<unknown>[] = [];
-
-  if (data.journalEntries.length > 0) {
-    insertTasks.push(
-      db
-        .insert(journalEntries)
-        .values(
-          data.journalEntries.map((je) => ({
-            id: pk(je.id),
-            organizationId: orgId,
-            entryNumber: je.entryNumber,
-            date: je.date,
-            memo: je.memo,
-            sourceType: je.sourceType,
-            sourceId: je.sourceId ?? null,
-            reversesEntryId: je.reversesEntryId ?? null,
-            reversedByEntryId: je.reversedByEntryId ?? null,
-            reconciled: Boolean(je.reconciled),
-          }))
-        )
-        .then(async () => {
-          const allLines = data.journalEntries.flatMap((je) =>
-            je.lines.map((l) => ({
-              id: pk(l.id),
-              organizationId: orgId,
-              journalEntryId: pk(je.id),
-              accountId: pk(l.accountId),
-              accountCode: l.accountCode,
-              accountName: l.accountName,
-              description: l.description,
-              debitCents: l.debitCents,
-              creditCents: l.creditCents,
-              entityName: l.entityName ?? null,
-            }))
-          );
-          if (allLines.length > 0) {
-            await db.insert(journalLines).values(allLines);
-          }
-        })
-    );
-  }
-
-  if (data.bankTransactions.length > 0) {
-    insertTasks.push(
-      db.insert(bankTransactions).values(
-        data.bankTransactions.map((tx) => ({
-          id: pk(tx.id),
+    if (data.accounts.length > 0) {
+      await tx.insert(accounts).values(
+        data.accounts.map((a) => ({
+          id: pk(a.id),
           organizationId: orgId,
-          bankAccountId: pk(tx.bankAccountId),
-          date: tx.date,
-          description: tx.description,
-          payee: tx.payee ?? null,
-          amountCents: tx.amountCents,
-          status: tx.status,
-          suggestedAccountId: tx.suggestedAccountId ?? null,
-          matchedRuleName: tx.matchedRuleName ?? null,
-          aiConfidence: tx.aiConfidence ?? null,
-          aiReasoning: tx.aiReasoning ?? null,
-          postedJournalEntryId: tx.postedJournalEntryId ?? null,
-          fingerprint: tx.fingerprint,
-          reconciled: Boolean(tx.reconciled),
+          code: a.code,
+          name: a.name,
+          type: a.type,
+          detailType: a.detailType,
+          normalBalance: a.normalBalance,
+          bankBalanceCents: a.bankBalanceCents ?? null,
+          isActive: a.isActive,
         }))
-      )
-    );
-  }
+      );
+    }
 
-  await Promise.all(insertTasks);
+    if (data.journalEntries.length > 0) {
+      await tx.insert(journalEntries).values(
+        data.journalEntries.map((je) => ({
+          id: pk(je.id),
+          organizationId: orgId,
+          entryNumber: je.entryNumber,
+          date: je.date,
+          memo: je.memo,
+          sourceType: je.sourceType,
+          sourceId: je.sourceId ?? null,
+          reversesEntryId: je.reversesEntryId ?? null,
+          reversedByEntryId: je.reversedByEntryId ?? null,
+          reconciled: Boolean(je.reconciled),
+        }))
+      );
+
+      const allLines = data.journalEntries.flatMap((je) =>
+        je.lines.map((l) => ({
+          id: pk(l.id),
+          organizationId: orgId,
+          journalEntryId: pk(je.id),
+          accountId: pk(l.accountId),
+          accountCode: l.accountCode,
+          accountName: l.accountName,
+          description: l.description,
+          debitCents: l.debitCents,
+          creditCents: l.creditCents,
+          entityName: l.entityName ?? null,
+        }))
+      );
+      if (allLines.length > 0) {
+        await tx.insert(journalLines).values(allLines);
+      }
+    }
+
+    if (data.bankTransactions.length > 0) {
+      await tx.insert(bankTransactions).values(
+        data.bankTransactions.map((txRow) => ({
+          id: pk(txRow.id),
+          organizationId: orgId,
+          bankAccountId: pk(txRow.bankAccountId),
+          date: txRow.date,
+          description: txRow.description,
+          payee: txRow.payee ?? null,
+          amountCents: txRow.amountCents,
+          status: txRow.status,
+          suggestedAccountId: txRow.suggestedAccountId ?? null,
+          matchedRuleName: txRow.matchedRuleName ?? null,
+          aiConfidence: txRow.aiConfidence ?? null,
+          aiReasoning: txRow.aiReasoning ?? null,
+          postedJournalEntryId: txRow.postedJournalEntryId ?? null,
+          fingerprint: txRow.fingerprint,
+          reconciled: Boolean(txRow.reconciled),
+        }))
+      );
+    }
+  });
 }

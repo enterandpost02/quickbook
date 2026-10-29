@@ -2,11 +2,13 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import {
+  ArrowLeft,
   BookOpenCheck,
   Building2,
   Check,
   CheckCircle2,
   ChevronDown,
+  Crown,
   FileSpreadsheet,
   FileText,
   History,
@@ -53,6 +55,7 @@ export interface CurrentUserSession {
   email?: string;
   fullName?: string;
   role?: "owner" | "staff" | "accountant";
+  isSuperAdmin?: boolean;
 }
 
 export function QboWorkspace({
@@ -173,6 +176,10 @@ export function QboWorkspace({
     }, 4000);
   }
 
+  const isAuthenticatedOwner = Boolean(
+    currentUser?.isSuperAdmin || (currentUser?.role ?? "owner") === "owner"
+  );
+
   async function runAction(
     action: string,
     payload?: unknown,
@@ -183,7 +190,11 @@ export function QboWorkspace({
       const res = await fetch("/api/qbo", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, payload }),
+        body: JSON.stringify({
+          action,
+          payload,
+          previewRole: state.activeRole,
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -329,48 +340,52 @@ export function QboWorkspace({
           </p>
         </div>
 
-        <button
-          onClick={async () => {
-            if (
-              window.confirm(
-                `Wipe all sample data for "${state.companyName}"?\n\nThis removes all invoices, bills, journal entries, and bank transactions so you can start with fresh $0.00 books for your real business.`
-              )
-            ) {
-              if (isMobile) setIsMobileMenuOpen(false);
-              await runAction(
-                "wipe_transactions",
-                {},
-                `Wiped all sample transactions for "${state.companyName}". Books are now fresh with $0.00 balances!`
-              );
-            }
-          }}
-          className="w-full flex items-center justify-center gap-1.5 rounded-lg border border-rose-900/60 bg-rose-950/30 py-1.5 text-xs font-semibold text-rose-300 hover:bg-rose-900/50 hover:text-rose-100 transition-colors"
-          title="Delete all sample transactions and reset to $0.00"
-        >
-          <Trash2 className="h-3 w-3 text-rose-400" />
-          Wipe Sample Data ($0.00)
-        </button>
+        {isAuthenticatedOwner && (
+          <>
+            <button
+              onClick={async () => {
+                if (
+                  window.confirm(
+                    `Wipe all sample data for "${state.companyName}"?\n\nThis removes all invoices, bills, journal entries, and bank transactions so you can start with fresh $0.00 books for your real business.`
+                  )
+                ) {
+                  if (isMobile) setIsMobileMenuOpen(false);
+                  await runAction(
+                    "wipe_transactions",
+                    {},
+                    `Wiped all sample transactions for "${state.companyName}". Books are now fresh with $0.00 balances!`
+                  );
+                }
+              }}
+              className="w-full flex items-center justify-center gap-1.5 rounded-lg border border-rose-900/60 bg-rose-950/30 py-1.5 text-xs font-semibold text-rose-300 hover:bg-rose-900/50 hover:text-rose-100 transition-colors"
+              title="Delete all sample transactions and reset to $0.00"
+            >
+              <Trash2 className="h-3 w-3 text-rose-400" />
+              Wipe Sample Data ($0.00)
+            </button>
 
-        <button
-          onClick={async () => {
-            if (
-              window.confirm(
-                `Reset "${state.companyName}" to pre-loaded sample practice data?`
-              )
-            ) {
-              if (isMobile) setIsMobileMenuOpen(false);
-              await runAction(
-                "reset_demo",
-                {},
-                "Reset sample company data to initial state"
-              );
-            }
-          }}
-          className="w-full flex items-center justify-center gap-1.5 rounded-lg border border-slate-700 py-1 text-[11px] text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
-        >
-          <RotateCcw className="h-3 w-3" />
-          Load Demo Practice Data
-        </button>
+            <button
+              onClick={async () => {
+                if (
+                  window.confirm(
+                    `Reset "${state.companyName}" to pre-loaded sample practice data?`
+                  )
+                ) {
+                  if (isMobile) setIsMobileMenuOpen(false);
+                  await runAction(
+                    "reset_demo",
+                    {},
+                    "Reset sample company data to initial state"
+                  );
+                }
+              }}
+              className="w-full flex items-center justify-center gap-1.5 rounded-lg border border-slate-700 py-1 text-[11px] text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
+            >
+              <RotateCcw className="h-3 w-3" />
+              Load Demo Practice Data
+            </button>
+          </>
+        )}
 
         <button
           onClick={() => {
@@ -409,6 +424,26 @@ export function QboWorkspace({
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0">
+        {/* Godfather Super Admin Inspection Banner (Hidden for regular Company Owners) */}
+        {currentUser?.isSuperAdmin && (
+          <div className="bg-slate-950 text-amber-300 border-b border-amber-500/30 px-3 sm:px-6 py-1.5 flex flex-wrap items-center justify-between gap-2 text-xs z-40">
+            <div className="flex items-center gap-2 font-semibold min-w-0">
+              <Crown className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+              <span className="truncate">
+                Godfather Super Admin Mode · Inspecting{" "}
+                <strong className="text-white">{state.companyName}</strong>
+              </span>
+            </div>
+            <a
+              href="/admin"
+              className="inline-flex items-center gap-1 rounded-full bg-amber-400/15 border border-amber-400/40 px-2.5 py-0.5 text-[11px] font-bold text-amber-200 hover:bg-amber-400/25 transition-colors shrink-0"
+            >
+              <ArrowLeft className="h-3 w-3" />
+              Back to Godfather Console
+            </a>
+          </div>
+        )}
+
         {/* Top White QBO App Bar */}
         <header className="h-14 bg-white border-b border-slate-200 px-3 sm:px-6 flex items-center justify-between sticky top-0 z-30">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
@@ -488,29 +523,33 @@ export function QboWorkspace({
                     })}
                   </div>
 
-                  <div className="p-2 bg-slate-50 border-t border-slate-200">
-                    <button
-                      onClick={() => {
-                        setShowOrgDropdown(false);
-                        setShowNewCompanyModal(true);
-                      }}
-                      className="w-full flex items-center justify-center gap-1.5 rounded-lg bg-[#2CA01C] px-3 py-2 text-xs font-bold text-white hover:bg-[#248217]"
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                      Create New Company
-                    </button>
-                  </div>
+                  {isAuthenticatedOwner && (
+                    <div className="p-2 bg-slate-50 border-t border-slate-200">
+                      <button
+                        onClick={() => {
+                          setShowOrgDropdown(false);
+                          setShowNewCompanyModal(true);
+                        }}
+                        className="w-full flex items-center justify-center gap-1.5 rounded-lg bg-[#2CA01C] px-3 py-2 text-xs font-bold text-white hover:bg-[#248217]"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        Create New Company
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
 
-            <button
-              onClick={() => setShowNewCompanyModal(true)}
-              className="hidden sm:inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 text-[11px] font-semibold text-[#2CA01C] hover:bg-emerald-100"
-            >
-              <Plus className="h-3 w-3" />
-              New Company
-            </button>
+            {isAuthenticatedOwner && (
+              <button
+                onClick={() => setShowNewCompanyModal(true)}
+                className="hidden sm:inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 text-[11px] font-semibold text-[#2CA01C] hover:bg-emerald-100"
+              >
+                <Plus className="h-3 w-3" />
+                New Company
+              </button>
+            )}
 
             <button
               onClick={() => setActiveTab("audit")}
@@ -675,57 +714,68 @@ export function QboWorkspace({
                 className="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 hover:bg-slate-100 pl-1 pr-2.5 py-1 transition-colors"
                 title="User Profile & Session"
               >
-                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#0077C5] text-white text-xs font-bold">
+                <div
+                  className={`flex h-7 w-7 items-center justify-center rounded-full text-white text-xs font-bold ${
+                    currentUser?.isSuperAdmin ? "bg-amber-500 text-slate-950" : "bg-[#0077C5]"
+                  }`}
+                >
                   {(
                     currentUser?.fullName ||
-                    (state.teamMembers.find((m) => m.role === state.activeRole)?.name === "Craig Carlson"
-                      ? "Enter & Post Admin"
-                      : state.teamMembers.find((m) => m.role === state.activeRole)?.name) ||
-                    "Enter & Post Admin"
+                    state.teamMembers.find((m) => m.role === state.activeRole)?.name ||
+                    "Company Owner"
                   )
                     .split(" ")
                     .map((n) => n[0])
                     .join("")
-                    .slice(0, 2)}
+                    .slice(0, 2)
+                    .toUpperCase()}
                 </div>
                 <span className="hidden lg:inline text-xs font-semibold text-slate-700">
                   {currentUser?.fullName ||
-                    (state.teamMembers.find((m) => m.role === state.activeRole)?.name === "Craig Carlson"
-                      ? "Enter & Post Admin"
-                      : state.teamMembers.find((m) => m.role === state.activeRole)?.name) ||
-                    "Enter & Post Admin"}
+                    state.teamMembers.find((m) => m.role === state.activeRole)?.name ||
+                    "Company Owner"}
                 </span>
                 <ChevronDown className="h-3 w-3 text-slate-400" />
               </button>
 
               {showUserMenu && (() => {
-                const sanitizedMembers = (state.teamMembers || [])
-                  .filter(
-                    (m) =>
-                      m.name !== "Sarah Jenkins" &&
-                      m.name !== "Arthur Andersen, CPA" &&
-                      !m.email.includes("bayareacpa.com") &&
-                      m.email !== "sarah@enterandpost.com" &&
-                      m.email !== "sarah@craigslandscaping.com"
-                  )
-                  .map((m) => {
-                    if (m.role === "owner" && (m.name === "Craig Carlson" || m.email.includes("craig"))) {
-                      return { ...m, name: "Enter & Post Admin", email: "enterandpost02@gmail.com" };
-                    }
-                    return m;
-                  });
-                const activeMember = sanitizedMembers.find((m) => m.role === state.activeRole) || sanitizedMembers[0];
-                const displayName = currentUser?.fullName || activeMember?.name || "Enter & Post Admin";
-                const displayEmail = currentUser?.email || activeMember?.email || "enterandpost02@gmail.com";
+                const sanitizedMembers = (state.teamMembers || []).filter(
+                  (m) =>
+                    m.email.toLowerCase() !== "enterandpost02@gmail.com" &&
+                    m.name !== "Sarah Jenkins" &&
+                    m.name !== "Arthur Andersen, CPA" &&
+                    !m.email.includes("bayareacpa.com") &&
+                    m.email !== "sarah@enterandpost.com" &&
+                    m.email !== "sarah@craigslandscaping.com"
+                );
+                const activeMember =
+                  sanitizedMembers.find((m) => m.role === state.activeRole) ||
+                  sanitizedMembers[0];
+                const displayName =
+                  currentUser?.fullName || activeMember?.name || "Company Owner";
+                const displayEmail =
+                  currentUser?.email || activeMember?.email || "";
 
                 return (
                   <div className="absolute right-0 mt-2 w-72 rounded-xl border border-slate-200 bg-white shadow-xl z-50 overflow-hidden">
                     <div className="p-3.5 bg-[#1E252B] text-white">
                       <p className="text-xs font-bold">{displayName}</p>
-                      <p className="text-[11px] text-slate-300 truncate font-mono">{displayEmail}</p>
+                      {displayEmail && (
+                        <p className="text-[11px] text-slate-300 truncate font-mono">
+                          {displayEmail}
+                        </p>
+                      )}
                       <div className="mt-2 flex items-center gap-1.5">
-                        <span className="rounded bg-[#2CA01C] px-2 py-0.5 text-[10px] font-bold uppercase text-white">
-                          {state.activeRole === "accountant"
+                        <span
+                          className={`rounded px-2 py-0.5 text-[10px] font-bold uppercase ${
+                            currentUser?.isSuperAdmin
+                              ? "bg-amber-400 text-slate-950"
+                              : "bg-[#2CA01C] text-white"
+                          }`}
+                        >
+                          {currentUser?.isSuperAdmin
+                            ? "Super Admin (Godfather)"
+                            : state.activeRole === "accountant"
                             ? "Accountant (Read-Only)"
                             : state.activeRole === "staff"
                             ? "Staff Bookkeeper"
@@ -737,10 +787,10 @@ export function QboWorkspace({
                       </div>
                     </div>
 
-                    {sanitizedMembers.length > 1 ? (
+                    {isAuthenticatedOwner && sanitizedMembers.length > 1 ? (
                       <div className="p-2 border-b border-slate-100">
                         <p className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                          Switch Active User ({sanitizedMembers.length})
+                          Preview Role Permissions ({sanitizedMembers.length})
                         </p>
                         {sanitizedMembers.map((m) => {
                           const isSelected = state.activeRole === m.role;
@@ -752,7 +802,7 @@ export function QboWorkspace({
                                 await runAction(
                                   "switch_role",
                                   { role: m.role },
-                                  `Switched session to ${m.name} (${m.role.toUpperCase()})`
+                                  `Previewing permissions as ${m.name} (${m.role.toUpperCase()})`
                                 );
                               }}
                               className={`w-full flex items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-xs font-medium transition-colors ${
@@ -761,8 +811,8 @@ export function QboWorkspace({
                                   : "text-slate-700 hover:bg-slate-50"
                               }`}
                             >
-                              <div className="flex flex-col">
-                                <span className="font-semibold text-slate-900">
+                              <div className="flex flex-col min-w-0 pr-2">
+                                <span className="font-semibold text-slate-900 truncate">
                                   {m.role === "accountant"
                                     ? "Accountant (Read-Only)"
                                     : m.role === "staff"
@@ -770,7 +820,7 @@ export function QboWorkspace({
                                     : "Owner"}{" "}
                                   ({m.name})
                                 </span>
-                                <span className="text-[10px] text-slate-400 font-mono">
+                                <span className="text-[10px] text-slate-400 font-mono truncate">
                                   {m.email}
                                 </span>
                               </div>
@@ -784,29 +834,55 @@ export function QboWorkspace({
                     ) : (
                       <div className="p-2.5 border-b border-slate-100 bg-slate-50/50">
                         <div className="flex items-center justify-between">
-                          <span className="text-[11px] font-bold text-slate-700">Team Role:</span>
+                          <span className="text-[11px] font-bold text-slate-700">
+                            Authenticated Role:
+                          </span>
                           <span className="text-[10px] font-bold text-[#2CA01C] bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
-                            Owner (Active)
+                            {currentUser?.isSuperAdmin
+                              ? "Super Admin"
+                              : state.activeRole === "accountant"
+                              ? "Accountant (Read-Only)"
+                              : state.activeRole === "staff"
+                              ? "Staff Bookkeeper (Active)"
+                              : "Owner (Active)"}
                           </span>
                         </div>
-                        <p className="text-[10px] text-slate-400 mt-1">
-                          No other employees in this organization. Invite staff or accountants in <strong>Team Settings</strong>.
-                        </p>
+                        {isAuthenticatedOwner && (
+                          <p className="text-[10px] text-slate-400 mt-1">
+                            Manage or invite staff bookkeepers &amp; accountants in{" "}
+                            <strong>Audit, Teams &amp; Security</strong>.
+                          </p>
+                        )}
                       </div>
                     )}
 
                     <div className="p-2 bg-slate-50 flex flex-col gap-1">
+                      {currentUser?.isSuperAdmin && (
+                        <a
+                          href="/admin"
+                          className="w-full flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs font-bold text-amber-900 bg-amber-100 hover:bg-amber-200/80 border border-amber-300 text-left transition-colors"
+                        >
+                          <Crown className="h-3.5 w-3.5 text-amber-700 shrink-0" />
+                          Godfather Admin Console (/admin)
+                        </a>
+                      )}
+                      {isAuthenticatedOwner && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowUserMenu(false);
+                            setActiveTab("audit");
+                          }}
+                          className="w-full rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-200/70 text-left"
+                        >
+                          Manage Staff &amp; Team Roles
+                        </button>
+                      )}
                       <a
                         href="/login"
                         className="w-full rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-200/70 text-left"
                       >
-                        Sign in as another user (/login)
-                      </a>
-                      <a
-                        href="/signup"
-                        className="w-full rounded-lg px-2.5 py-1.5 text-xs font-semibold text-[#0077C5] hover:bg-sky-50 text-left"
-                      >
-                        + Register new user &amp; company (/signup)
+                        Switch Account (/login)
                       </a>
 
                       <div className="my-1 border-t border-slate-200" />
@@ -965,6 +1041,8 @@ export function QboWorkspace({
               setActiveModal={setActiveModal}
               runAction={runAction}
               isSubmitting={isSubmitting}
+              canManageTeam={isAuthenticatedOwner}
+              currentUserEmail={currentUser?.email}
             />
           )}
         </main>

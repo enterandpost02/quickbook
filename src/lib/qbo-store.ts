@@ -278,7 +278,16 @@ function makeFingerprint(
     .toUpperCase()}|${amountCents}`;
 }
 
-export function createInitialSeedData(customCompanyName?: string): QboStoreData {
+export interface InitialOwnerInfo {
+  id?: string;
+  name: string;
+  email: string;
+}
+
+export function createInitialSeedData(
+  customCompanyName?: string,
+  ownerInfo?: InitialOwnerInfo
+): QboStoreData {
   const accounts: QboAccount[] = [
     // Banking
     {
@@ -1483,9 +1492,9 @@ export function createInitialSeedData(customCompanyName?: string): QboStoreData 
 
   const teamMembers: QboTeamMember[] = [
     {
-      id: "tm-1",
-      name: "Enter & Post Admin",
-      email: "enterandpost02@gmail.com",
+      id: ownerInfo?.id || "tm-1",
+      name: ownerInfo?.name?.trim() || "Company Owner",
+      email: ownerInfo?.email?.trim().toLowerCase() || "owner@company.local",
       role: "owner",
       status: "Active",
     },
@@ -1513,8 +1522,14 @@ export function createInitialSeedData(customCompanyName?: string): QboStoreData 
   };
 }
 
-export function createFreshCompanyData(companyName: string): QboStoreData {
-  const base = createInitialSeedData(companyName);
+export function createFreshCompanyData(
+  companyName: string,
+  ownerInfo?: InitialOwnerInfo
+): QboStoreData {
+  const base = createInitialSeedData(companyName, ownerInfo);
+  const ownerName = ownerInfo?.name?.trim() || "Company Owner";
+  const ownerEmail =
+    ownerInfo?.email?.trim().toLowerCase() || "owner@company.local";
   return {
     companyName: companyName.trim() || "New Business LLC",
     lockedThroughDate: null,
@@ -1522,9 +1537,9 @@ export function createFreshCompanyData(companyName: string): QboStoreData {
     salesTaxRatePercent: 8.25,
     teamMembers: [
       {
-        id: "tm-1",
-        name: "Enter & Post Admin",
-        email: "enterandpost02@gmail.com",
+        id: ownerInfo?.id || "tm-1",
+        name: ownerName,
+        email: ownerEmail,
         role: "owner",
         status: "Active",
       },
@@ -1547,7 +1562,7 @@ export function createFreshCompanyData(companyName: string): QboStoreData {
       {
         id: `aud-init-${Date.now()}`,
         timestamp: new Date().toISOString(),
-        user: "Business Owner (Owner)",
+        user: `${ownerName} (OWNER)`,
         action: "Company Created",
         details: `Initialized 31 Chart of Accounts for ${companyName.trim()}`,
       },
@@ -1572,8 +1587,26 @@ export function hydrateQboStore(data: QboStoreData): void {
   globalStore.__qboStoreData = data;
 }
 
-export function resetQboStore(): QboStoreData {
-  globalStore.__qboStoreData = createInitialSeedData();
+export function resetQboStore(ownerInfo?: InitialOwnerInfo): QboStoreData {
+  const current = globalStore.__qboStoreData;
+  const fallbackOwner =
+    ownerInfo ||
+    (() => {
+      const existingOwner = current?.teamMembers.find(
+        (m) => m.role === "owner" && m.email !== "enterandpost02@gmail.com"
+      );
+      return existingOwner
+        ? {
+            id: existingOwner.id,
+            name: existingOwner.name,
+            email: existingOwner.email,
+          }
+        : undefined;
+    })();
+  globalStore.__qboStoreData = createInitialSeedData(
+    current?.companyName,
+    fallbackOwner
+  );
   return globalStore.__qboStoreData;
 }
 
@@ -1595,17 +1628,26 @@ export function wipeAllCompanyTransactions(): QboStoreData {
       acc.bankBalanceCents = 0;
     }
   }
-  // Reset team members to only the active Company Owner for fresh production books
-  const ownerMember = store.teamMembers.find((m) => m.role === "owner");
-  store.teamMembers = [
-    {
-      id: ownerMember?.id || "tm-1",
-      name: ownerMember?.name === "Craig Carlson" ? "Enter & Post Admin" : (ownerMember?.name || "Enter & Post Admin"),
-      email: "enterandpost02@gmail.com",
-      role: "owner",
-      status: "Active",
-    },
-  ];
+  // Preserve real team members (filtering out any legacy mock or super-admin emails)
+  const realMembers = (store.teamMembers || []).filter(
+    (m) =>
+      m.email !== "enterandpost02@gmail.com" &&
+      m.name !== "Sarah Jenkins" &&
+      m.name !== "Arthur Andersen, CPA"
+  );
+  if (realMembers.length > 0) {
+    store.teamMembers = realMembers;
+  } else {
+    store.teamMembers = [
+      {
+        id: "tm-1",
+        name: "Company Owner",
+        email: "owner@company.local",
+        role: "owner",
+        status: "Active",
+      },
+    ];
+  }
   store.activeRole = "owner";
   appendAuditLog(
     "All Transactions Wiped",
@@ -1625,7 +1667,7 @@ function appendAuditLog(
   );
   const userLabel = activeUser
     ? `${activeUser.name} (${activeUser.role.toUpperCase()})`
-    : "Enter & Post Admin (OWNER)";
+    : `Company Owner (${store.activeRole.toUpperCase()})`;
 
   store.auditLogs.unshift({
     id: `aud-${Date.now()}-${store.auditLogs.length}`,
@@ -3820,28 +3862,90 @@ export function setActiveRole(role: "owner" | "staff" | "accountant"): void {
 }
 
 export function inviteTeamMember(input: {
+  id?: string;
   name: string;
   email: string;
   role: "owner" | "staff" | "accountant";
+  status?: "Active" | "Invited";
 }): QboTeamMember {
   assertCanWrite();
-  if (input.role === "owner") {
-    assertIsOwner("invite another Company Owner");
-  }
+  assertIsOwner("invite or manage team members");
   const store = getRawStore();
+  const cleanEmail = input.email.trim().toLowerCase();
+  const existingIdx = store.teamMembers.findIndex(
+    (m) => m.email.toLowerCase() === cleanEmail
+  );
   const member: QboTeamMember = {
-    id: `tm-${Date.now()}`,
-    name: input.name,
-    email: input.email,
+    id: input.id || (existingIdx >= 0 ? store.teamMembers[existingIdx].id : `tm-${Date.now()}`),
+    name: input.name.trim(),
+    email: cleanEmail,
     role: input.role,
-    status: "Invited",
+    status: input.status ?? "Invited",
   };
-  store.teamMembers.push(member);
+  if (existingIdx >= 0) {
+    store.teamMembers[existingIdx] = member;
+  } else {
+    store.teamMembers.push(member);
+  }
   appendAuditLog(
-    "Team Member Invited",
-    `${member.name} (${member.email}) invited as ${member.role}`
+    member.status === "Active" ? "Team Member Added" : "Team Member Invited",
+    `${member.name} (${member.email}) ${
+      member.status === "Active" ? "provisioned" : "invited"
+    } as ${member.role}`
   );
   return member;
+}
+
+export function updateTeamMemberRoleInStore(input: {
+  memberId?: string;
+  email?: string;
+  role: "owner" | "staff" | "accountant";
+}): QboTeamMember {
+  assertCanWrite();
+  assertIsOwner("change team member roles");
+  const store = getRawStore();
+  const cleanEmail = input.email?.trim().toLowerCase();
+  const target = store.teamMembers.find(
+    (m) =>
+      (input.memberId && m.id === input.memberId) ||
+      (cleanEmail && m.email.toLowerCase() === cleanEmail)
+  );
+  if (!target) {
+    throw new Error("Team member not found.");
+  }
+  target.role = input.role;
+  appendAuditLog(
+    "Team Member Role Updated",
+    `Updated ${target.name} (${target.email}) role to ${input.role.toUpperCase()}`
+  );
+  return target;
+}
+
+export function removeTeamMemberFromStore(input: {
+  memberId?: string;
+  email?: string;
+}): void {
+  assertCanWrite();
+  assertIsOwner("remove team members");
+  const store = getRawStore();
+  const cleanEmail = input.email?.trim().toLowerCase();
+  const target = store.teamMembers.find(
+    (m) =>
+      (input.memberId && m.id === input.memberId) ||
+      (cleanEmail && m.email.toLowerCase() === cleanEmail)
+  );
+  if (!target) {
+    throw new Error("Team member not found.");
+  }
+  const ownersCount = store.teamMembers.filter((m) => m.role === "owner").length;
+  if (target.role === "owner" && ownersCount <= 1) {
+    throw new Error("Cannot remove the primary Company Owner.");
+  }
+  store.teamMembers = store.teamMembers.filter((m) => m.id !== target.id);
+  appendAuditLog(
+    "Team Member Removed",
+    `Revoked access for ${target.name} (${target.email})`
+  );
 }
 
 export function runAiAutoCategorizer(): { analyzedCount: number } {

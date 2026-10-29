@@ -12,6 +12,7 @@ import {
 import type { QboStoreData } from "@/lib/qbo-store";
 
 export type OrganizationRole = "owner" | "staff" | "accountant";
+export type SystemUserRole = "super_admin" | "user";
 
 export const organizations = pgTable("organizations", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -20,6 +21,9 @@ export const organizations = pgTable("organizations", {
   baseCurrency: text("base_currency").notNull().default("USD"),
   fiscalYearStartMonth: integer("fiscal_year_start_month").notNull().default(1),
   lockedThroughDate: date("locked_through_date"),
+  ownerEmail: text("owner_email"),
+  isSuspended: boolean("is_suspended").notNull().default(false),
+  planStatus: text("plan_status").notNull().default("active"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -33,6 +37,9 @@ export const users = pgTable("users", {
   email: text("email").notNull().unique(),
   fullName: text("full_name").notNull(),
   passwordHash: text("password_hash").notNull(),
+  isSuperAdmin: boolean("is_super_admin").notNull().default(false),
+  emailVerified: boolean("email_verified").notNull().default(true),
+  isSuspended: boolean("is_suspended").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -70,6 +77,41 @@ export const sessions = pgTable("sessions", {
   activeOrganizationId: uuid("active_organization_id")
     .notNull()
     .references(() => organizations.id, { onDelete: "cascade" }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const emailOtps = pgTable("email_otps", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  email: text("email").notNull().unique(),
+  otpHash: text("otp_hash").notNull(),
+  fullName: text("full_name").notNull(),
+  passwordHash: text("password_hash").notNull(),
+  organizationName: text("organization_name").notNull(),
+  baseCurrency: text("base_currency").notNull().default("USD"),
+  inviteToken: text("invite_token"),
+  attempts: integer("attempts").notNull().default(0),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const teamInvitations = pgTable("team_invitations", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  email: text("email").notNull(),
+  fullName: text("full_name").notNull(),
+  role: text("role").$type<OrganizationRole>().notNull().default("staff"),
+  token: text("token").notNull().unique(),
+  invitedByUserId: uuid("invited_by_user_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  status: text("status").notNull().default("pending"), // 'pending' | 'accepted' | 'revoked'
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
@@ -172,3 +214,5 @@ export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type OrganizationMember = typeof organizationMembers.$inferSelect;
 export type Session = typeof sessions.$inferSelect;
+export type EmailOtp = typeof emailOtps.$inferSelect;
+export type TeamInvitation = typeof teamInvitations.$inferSelect;
