@@ -174,7 +174,7 @@ function QuickCreateMenuModal({
             +
           </span>
           <h2 className="text-base font-bold text-slate-800">
-            QuickBooks Create New
+            Pro E Books - Create New
           </h2>
         </div>
         <button
@@ -416,7 +416,7 @@ function CsvImportModal({
           <Upload className="h-5 w-5 text-[#2CA01C]" />
           <div>
             <h2 className="text-base font-bold">
-              Upload Bank Statement CSV into QuickBooks
+              Upload Bank Statement CSV into Pro E Books
             </h2>
             <p className="text-xs text-slate-300">
               Supports single Amount or split Money Out/Money In columns, duplicate detection, and auto-rules
@@ -444,7 +444,7 @@ function CsvImportModal({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-semibold uppercase text-slate-600 mb-1.5">
-              1. Target QuickBooks Account
+              1. Target Pro E Books Account
             </label>
             <select
               value={bankAccountId}

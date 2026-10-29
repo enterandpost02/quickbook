@@ -33,7 +33,7 @@ export default function DashboardPage() {
     <Suspense
       fallback={
         <div className="min-h-screen flex items-center justify-center bg-[#F4F5F8] text-slate-600 text-sm font-semibold">
-          Loading QuickBooks Online Ledger from Supabase PostgreSQL...
+          Loading Pro E Books Ledger from Supabase PostgreSQL...
         </div>
       }
     >

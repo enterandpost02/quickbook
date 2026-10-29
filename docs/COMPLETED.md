@@ -152,3 +152,23 @@
 - **Owner Sanitization & Clean Books Reset:**
   - Executed [`scripts/sanitize-db-team.ts`](../scripts/sanitize-db-team.ts) and added runtime sanitization in [`src/lib/qbo-db.ts`](../src/lib/qbo-db.ts) to replace old demo owner names with `Enter & Post Admin` (`enterandpost02@gmail.com`).
   - Updated `wipeAllCompanyTransactions()` in [`src/lib/qbo-store.ts`](../src/lib/qbo-store.ts) to reset team members strictly to the active Owner (`Enter & Post Admin`), removing demo team members when wiping books for live use.
+
+## Phase 16 — Rebranding to 'Pro E Books' & Mobile Responsiveness
+- **Complete Rebranding to 'Pro E Books':**
+  - Updated application title, metadata, and logo headers to **Pro E Books** (`Pro E Books — Cloud Accounting & Financial Management`) across [`src/app/layout.tsx`](../src/app/layout.tsx) and [`src/app/(auth)/layout.tsx`](../src/app/(auth)/layout.tsx).
+  - Updated authentication pages ([`src/app/(auth)/login/page.tsx`](../src/app/(auth)/login/page.tsx)) to "Pro E Books Admin Credentials", "Sign In to Pro E Books", and "New to Pro E Books?".
+  - Updated workspace brand logo ([`src/components/qbo/qbo-workspace.tsx`](../src/components/qbo/qbo-workspace.tsx)) to `Pro E Books` with emerald branding and `Cloud Accounting` subtitle.
+  - Updated balance labels across all account tables, banking widgets, register headers, and reconcile displays to "In Pro E Books" and "Pro E Books Balance".
+  - Updated modal titles and CSV import dialogs ([`src/components/qbo/qbo-modals.tsx`](../src/components/qbo/qbo-modals.tsx)) to "Pro E Books - Create New" and "Upload Bank Statement CSV into Pro E Books".
+  - Updated email notification templates ([`src/lib/mailer.ts`](../src/lib/mailer.ts)) with sender name "Pro E Books", subjects ("You've been invited to join ... on Pro E Books"), and HTML email headers.
+- **Mobile & Small-Screen Responsiveness:**
+  - Replaced fixed-width left rail with responsive desktop sidebar (`hidden lg:flex w-60`) and mobile slide-out drawer (`fixed inset-0 z-50 lg:hidden`) with backdrop blur and close (`X`) button.
+  - Added mobile hamburger menu button (`lg:hidden`) to the top application header.
+  - Added mobile Quick Create (`+`) button directly in the header for small screens so mobile users can immediately access creation forms.
+  - Added expandable mobile search bar toggled by a search icon button on screens `< 640px`.
+  - Added horizontal scroll containment (`overflow-x-auto w-full min-w-[500px..700px]`) across all 15+ data tables (Invoices, Estimates, Customers, Products, Expenses, Bills, Vendors, Chart of Accounts, Journal Entries, Trial Balance, Aging Summaries, General Ledger, Reconciliations, Audit Logs, and Teams).
+  - Made summary metric cards stack flexibly (`grid grid-cols-1 sm:grid-cols-3` and `sm:grid-cols-2 lg:grid-cols-4`).
+  - Adjusted main viewport padding (`p-3 sm:p-5 lg:p-6 min-w-0 overflow-x-hidden`) to eliminate horizontal screen overflow and blowout on mobile devices (320px–420px viewports).
+- **Verified Production Build & Tests:**
+  - 20/20 automated unit tests passing (`npm test`).
+  - Next.js 16 production build succeeded across all 9 routes with 0 errors (`npm run build`).

@@ -23,7 +23,7 @@ export default async function AuthLayout({
           </div>
           <div>
             <span className="text-xl font-bold tracking-tight text-slate-900">
-              QuickBoooks
+              Pro E Books
             </span>
             <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-800">
               Double-Entry

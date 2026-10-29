@@ -356,7 +356,7 @@ export function DashboardHomeView({
                     </div>
                     <div className="text-right">
                       <span className="block text-[10px] uppercase text-slate-400">
-                        In QuickBooks
+                        In Pro E Books
                       </span>
                       <span className="font-mono font-bold text-slate-900">
                         {formatCents(acc.balanceCents)}
@@ -401,7 +401,7 @@ export function DashboardHomeView({
             </button>
           </div>
 
-          <div className="grid grid-cols-3 gap-4 mb-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-4">
             <div className="border-l-4 border-amber-500 pl-3">
               <span className="block text-xs text-slate-500">Overdue</span>
               <span className="text-lg font-mono font-bold text-slate-900">
@@ -700,7 +700,7 @@ export function BankingCenterView({
                       isSelected ? "text-sky-100" : "text-slate-400"
                     }`}
                   >
-                    In QuickBooks
+                    In Pro E Books
                   </span>
                   <span className="text-sm font-mono font-semibold">
                     {formatCents(acc.balanceCents)}
@@ -836,45 +836,47 @@ export function BankingCenterView({
               </button>
             </form>
 
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase">
-                <tr>
-                  <th className="px-4 py-2.5">Rule Name</th>
-                  <th className="px-4 py-2.5">Condition</th>
-                  <th className="px-4 py-2.5">Assign to Account</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {state.rules.map((r) => {
-                  const target = state.accounts.find(
-                    (a) => a.id === r.targetAccountId
-                  );
-                  return (
-                    <tr key={r.id}>
-                      <td className="px-4 py-3 font-semibold text-slate-900">
-                        {r.name}
-                      </td>
-                      <td className="px-4 py-3 text-slate-600">
-                        Description contains{" "}
-                        <code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-slate-800">
-                          {r.containsText}
-                        </code>{" "}
-                        ({r.direction})
-                      </td>
-                      <td className="px-4 py-3 font-medium text-[#2CA01C]">
-                        {target
-                          ? `${target.code} — ${target.name}`
-                          : r.targetAccountId}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            <div className="overflow-x-auto w-full">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase">
+                  <tr>
+                    <th className="px-4 py-2.5">Rule Name</th>
+                    <th className="px-4 py-2.5">Condition</th>
+                    <th className="px-4 py-2.5">Assign to Account</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {state.rules.map((r) => {
+                    const target = state.accounts.find(
+                      (a) => a.id === r.targetAccountId
+                    );
+                    return (
+                      <tr key={r.id}>
+                        <td className="px-4 py-3 font-semibold text-slate-900">
+                          {r.name}
+                        </td>
+                        <td className="px-4 py-3 text-slate-600">
+                          Description contains{" "}
+                          <code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-slate-800">
+                            {r.containsText}
+                          </code>{" "}
+                          ({r.direction})
+                        </td>
+                        <td className="px-4 py-3 font-medium text-[#2CA01C]">
+                          {target
+                            ? `${target.code} — ${target.name}`
+                            : r.targetAccountId}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+          <div className="overflow-x-auto w-full">
+            <table className="w-full text-left text-xs min-w-[550px]">
               <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase">
                 <tr>
                   <th className="px-4 py-3">Date</th>
@@ -1337,7 +1339,8 @@ export function SalesAndInvoicesView({
         </div>
 
         {subTab === "invoices" && (
-          <table className="w-full text-left text-xs">
+          <div className="overflow-x-auto w-full">
+            <table className="w-full text-left text-xs min-w-[650px]">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase">
               <tr>
                 <th className="px-4 py-3">Date</th>
@@ -1415,10 +1418,12 @@ export function SalesAndInvoicesView({
               ))}
             </tbody>
           </table>
+          </div>
         )}
 
         {subTab === "estimates" && (
-          <table className="w-full text-left text-xs">
+          <div className="overflow-x-auto w-full">
+            <table className="w-full text-left text-xs min-w-[600px]">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase">
               <tr>
                 <th className="px-4 py-3">Date</th>
@@ -1485,10 +1490,12 @@ export function SalesAndInvoicesView({
               ))}
             </tbody>
           </table>
+          </div>
         )}
 
         {subTab === "customers" && (
-          <table className="w-full text-left text-xs">
+          <div className="overflow-x-auto w-full">
+            <table className="w-full text-left text-xs min-w-[650px]">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase">
               <tr>
                 <th className="px-4 py-3">Customer / Company</th>
@@ -1540,10 +1547,12 @@ export function SalesAndInvoicesView({
               })}
             </tbody>
           </table>
+          </div>
         )}
 
         {subTab === "products" && (
-          <table className="w-full text-left text-xs">
+          <div className="overflow-x-auto w-full">
+            <table className="w-full text-left text-xs min-w-[600px]">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase">
               <tr>
                 <th className="px-4 py-3">SKU</th>
@@ -1575,6 +1584,7 @@ export function SalesAndInvoicesView({
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
     </div>
@@ -1650,7 +1660,8 @@ export function ExpensesAndVendorsView({
         </div>
 
         {subTab === "expenses" ? (
-          <table className="w-full text-left text-xs">
+          <div className="overflow-x-auto w-full">
+            <table className="w-full text-left text-xs min-w-[650px]">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase">
               <tr>
                 <th className="px-4 py-3">Date</th>
@@ -1725,8 +1736,10 @@ export function ExpensesAndVendorsView({
               ))}
             </tbody>
           </table>
+          </div>
         ) : (
-          <table className="w-full text-left text-xs">
+          <div className="overflow-x-auto w-full">
+            <table className="w-full text-left text-xs min-w-[650px]">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase">
               <tr>
                 <th className="px-4 py-3">Vendor / Company</th>
@@ -1797,6 +1810,7 @@ export function ExpensesAndVendorsView({
               })}
             </tbody>
           </table>
+          </div>
         )}
       </div>
     </div>
@@ -1854,14 +1868,15 @@ export function ChartOfAccountsView({
       </div>
 
       <div className="rounded-xl bg-white border border-slate-200 shadow-2xs overflow-hidden">
-        <table className="w-full text-left text-xs">
+        <div className="overflow-x-auto w-full">
+          <table className="w-full text-left text-xs min-w-[700px]">
           <thead className="bg-[#F4F5F8] border-b border-slate-200 text-slate-600 uppercase">
             <tr>
               <th className="px-4 py-3 w-20">Code</th>
               <th className="px-4 py-3">Account Name</th>
               <th className="px-4 py-3">Account Type</th>
               <th className="px-4 py-3">Detail Type</th>
-              <th className="px-4 py-3 text-right">QuickBooks Balance</th>
+              <th className="px-4 py-3 text-right">Pro E Books Balance</th>
               <th className="px-4 py-3 text-right">Bank Balance</th>
               <th className="px-4 py-3 text-right">Action</th>
             </tr>
@@ -1897,6 +1912,7 @@ export function ChartOfAccountsView({
             ))}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );
@@ -1985,7 +2001,8 @@ export function JournalEntriesView({
                 </div>
               </div>
 
-              <table className="w-full text-left text-xs">
+              <div className="overflow-x-auto w-full">
+                <table className="w-full text-left text-xs min-w-[500px]">
                 <thead className="bg-slate-50/60 text-slate-400 uppercase border-b border-slate-100">
                   <tr>
                     <th className="px-5 py-2">Account</th>
@@ -2040,6 +2057,7 @@ export function JournalEntriesView({
                   </tr>
                 </tfoot>
               </table>
+              </div>
             </div>
           );
         })}
@@ -2532,7 +2550,7 @@ export function ReportsCenterView({ state }: ViewProps) {
       </div>
 
       {/* Report Paper Sheet */}
-      <div className="rounded-xl bg-white border border-slate-200 shadow-sm p-8 max-w-4xl mx-auto">
+      <div className="rounded-xl bg-white border border-slate-200 shadow-sm p-4 sm:p-8 max-w-4xl mx-auto min-w-0 overflow-hidden">
         <div className="text-center border-b border-slate-200 pb-5 mb-6">
           <h2 className="text-lg font-bold text-slate-900">
             {state.companyName}
@@ -2567,7 +2585,7 @@ export function ReportsCenterView({ state }: ViewProps) {
 
         {/* ---------------- PROFIT AND LOSS ---------------- */}
         {reportTab === "pnl" && (
-          <div className="space-y-6 text-xs">
+          <div className="space-y-6 text-xs overflow-x-auto min-w-0">
             {isComparing && (
               <div className="grid grid-cols-12 font-bold uppercase tracking-wider text-slate-500 border-b-2 border-slate-800 pb-2">
                 <span className="col-span-5">Account / Category</span>
@@ -2931,7 +2949,7 @@ export function ReportsCenterView({ state }: ViewProps) {
 
         {/* ---------------- BALANCE SHEET ---------------- */}
         {reportTab === "bs" && (
-          <div className="space-y-6 text-xs">
+          <div className="space-y-6 text-xs overflow-x-auto min-w-0">
             {isComparing && (
               <div className="grid grid-cols-12 font-bold uppercase tracking-wider text-slate-500 border-b-2 border-slate-800 pb-2">
                 <span className="col-span-5">Account</span>
@@ -3276,7 +3294,8 @@ export function ReportsCenterView({ state }: ViewProps) {
 
         {/* ---------------- TRIAL BALANCE ---------------- */}
         {reportTab === "tb" && (
-          <table className="w-full text-left text-xs">
+          <div className="overflow-x-auto w-full">
+            <table className="w-full text-left text-xs min-w-[550px]">
             <thead className="border-b-2 border-slate-800 text-slate-600 uppercase">
               <tr>
                 <th className="py-2">Account</th>
@@ -3388,11 +3407,13 @@ export function ReportsCenterView({ state }: ViewProps) {
               </tr>
             </tfoot>
           </table>
+          </div>
         )}
 
         {/* ---------------- AGING SUMMARIES (A/R & A/P) ---------------- */}
         {(reportTab === "ar_aging" || reportTab === "ap_aging") && (
-          <table className="w-full text-left text-xs">
+          <div className="overflow-x-auto w-full">
+            <table className="w-full text-left text-xs min-w-[550px]">
             <thead className="border-b-2 border-slate-800 text-slate-600 uppercase">
               <tr>
                 <th className="py-2">
@@ -3449,6 +3470,7 @@ export function ReportsCenterView({ state }: ViewProps) {
               </tr>
             </tfoot>
           </table>
+          </div>
         )}
 
         {/* ---------------- GENERAL LEDGER ---------------- */}
@@ -3473,7 +3495,8 @@ export function ReportsCenterView({ state }: ViewProps) {
                       Ending: {formatCents(acc.endingBalanceCents)}
                     </span>
                   </div>
-                  <table className="w-full text-left text-xs">
+                  <div className="overflow-x-auto w-full">
+                    <table className="w-full text-left text-xs min-w-[500px]">
                     <thead className="border-b border-slate-100 text-slate-400">
                       <tr>
                         <th className="px-4 py-1.5">Date</th>
@@ -3517,6 +3540,7 @@ export function ReportsCenterView({ state }: ViewProps) {
                       )}
                     </tbody>
                   </table>
+                  </div>
                 </div>
               ))}
           </div>
@@ -3741,7 +3765,7 @@ export function ReconcileView({ state, runAction, isSubmitting }: ViewProps) {
 
         <div>
           <span className="block text-[11px] font-bold uppercase text-slate-400">
-            Cleared Balance in QuickBooks
+            Cleared Balance in Pro E Books
           </span>
           <span className="text-xl font-mono font-bold text-slate-900">
             {formatCents(clearedBalanceCents)}
@@ -3765,7 +3789,8 @@ export function ReconcileView({ state, runAction, isSubmitting }: ViewProps) {
       </div>
 
       <div className="rounded-xl bg-white border border-slate-200 shadow-2xs overflow-hidden">
-        <table className="w-full text-left text-xs">
+        <div className="overflow-x-auto w-full">
+          <table className="w-full text-left text-xs min-w-[650px]">
           <thead className="bg-[#F4F5F8] border-b border-slate-200 text-slate-600 uppercase">
             <tr>
               <th className="px-4 py-3 w-12 text-center">Cleared</th>
@@ -3815,6 +3840,7 @@ export function ReconcileView({ state, runAction, isSubmitting }: ViewProps) {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
 
       {/* Reconciliation History */}
@@ -3824,7 +3850,8 @@ export function ReconcileView({ state, runAction, isSubmitting }: ViewProps) {
             History by Account ({state.reconciliations.length})
           </h3>
         </div>
-        <table className="w-full text-left text-xs">
+        <div className="overflow-x-auto w-full">
+          <table className="w-full text-left text-xs min-w-[550px]">
           <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase">
             <tr>
               <th className="px-4 py-2.5">Account</th>
@@ -3856,6 +3883,7 @@ export function ReconcileView({ state, runAction, isSubmitting }: ViewProps) {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );
@@ -3973,7 +4001,8 @@ export function AuditLogView({ state, runAction }: ViewProps) {
         </div>
 
         {subTab === "audit" && (
-          <table className="w-full text-left text-xs">
+          <div className="overflow-x-auto w-full">
+            <table className="w-full text-left text-xs min-w-[600px]">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase">
               <tr>
                 <th className="px-4 py-3">Date / Time</th>
@@ -4007,6 +4036,7 @@ export function AuditLogView({ state, runAction }: ViewProps) {
               ))}
             </tbody>
           </table>
+          </div>
         )}
 
         {subTab === "teams" && (
@@ -4087,7 +4117,8 @@ export function AuditLogView({ state, runAction }: ViewProps) {
               </p>
             </form>
 
-            <table className="w-full text-left text-xs">
+            <div className="overflow-x-auto w-full">
+              <table className="w-full text-left text-xs min-w-[550px]">
               <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase">
                 <tr>
                   <th className="px-4 py-3">Name</th>
@@ -4163,6 +4194,7 @@ export function AuditLogView({ state, runAction }: ViewProps) {
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         )}
 

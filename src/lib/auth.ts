@@ -60,7 +60,7 @@ export async function ensureAdminUserInDb() {
     const [newOrg] = await db
       .insert(organizations)
       .values({
-        name: "Enter & Post QuickBooks",
+        name: "Enter & Post Pro E Books",
         slug: slugifyOrganizationName("Enter & Post"),
         baseCurrency: "USD",
       })

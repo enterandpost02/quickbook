@@ -52,7 +52,7 @@ export default function LoginPage() {
 
           <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 p-3 text-xs text-emerald-900">
             <div className="flex items-center justify-between font-bold text-emerald-800 mb-1">
-              <span>QuickBooks Admin Credentials:</span>
+              <span>Pro E Books Admin Credentials:</span>
               <button
                 type="button"
                 onClick={fillAdminCredentials}
@@ -100,10 +100,10 @@ export default function LoginPage() {
 
         <CardFooter className="flex flex-col space-y-3">
           <Button type="submit" className="w-full bg-[#2CA01C] hover:bg-[#248217] text-white font-bold" disabled={isPending}>
-            {isPending ? "Signing in..." : "Sign In to QuickBooks"}
+            {isPending ? "Signing in..." : "Sign In to Pro E Books"}
           </Button>
           <p className="text-center text-sm text-slate-600">
-            New to QuickBoooks?{" "}
+            New to Pro E Books?{" "}
             <Link
               href="/signup"
               className="font-medium text-emerald-600 hover:underline"

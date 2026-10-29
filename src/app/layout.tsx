@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "QuickBoooks — Double-Entry Accounting",
+  title: "Pro E Books — Cloud Accounting & Financial Management",
   description:
     "Multi-tenant double-entry bookkeeping with integer-cents precision.",
 };

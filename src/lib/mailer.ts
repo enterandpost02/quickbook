@@ -1,7 +1,7 @@
 import nodemailer from "nodemailer";
 
 export const DEFAULT_SENDER_EMAIL = "enterandpost02@gmail.com";
-export const DEFAULT_SENDER_NAME = "QuickBooks Online";
+export const DEFAULT_SENDER_NAME = "Pro E Books";
 
 export interface SendInviteEmailParams {
   to: string;
@@ -63,7 +63,7 @@ export async function sendTeamInviteEmail(
     process.env.SMTP_USER ||
     DEFAULT_SENDER_EMAIL;
   const fromHeader = `"${DEFAULT_SENDER_NAME}" <${fromEmail}>`;
-  const subject = `You've been invited to join ${params.companyName} on QuickBooks Online`;
+  const subject = `You've been invited to join ${params.companyName} on Pro E Books`;
   const roleInfo = getRoleDescription(params.role);
 
   const baseUrl =
@@ -103,7 +103,7 @@ export async function sendTeamInviteEmail(
 <body>
   <div class="container">
     <div class="header">
-      <div class="header-logo">Quick<span>Books</span> Online</div>
+      <div class="header-logo">Pro <span>E Books</span></div>
     </div>
     <div class="body">
       <h1>Welcome to the team, ${params.recipientName}!</h1>
@@ -126,7 +126,7 @@ export async function sendTeamInviteEmail(
       </p>
     </div>
     <div class="footer">
-      This invitation was sent from ${fromEmail} via QuickBooks Online Team Management.
+      This invitation was sent from ${fromEmail} via Pro E Books Team Management.
       <br>If you were not expecting this message, you can safely ignore this email.
     </div>
   </div>
