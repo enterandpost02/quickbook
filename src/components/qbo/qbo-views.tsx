@@ -3901,13 +3901,161 @@ export function AuditLogView({ state, runAction }: ViewProps) {
     "accountant"
   );
 
+  function exportFullCompanyCsv() {
+    const esc = (val: unknown) => {
+      if (val === null || val === undefined) return '""';
+      const str = String(val).replace(/"/g, '""');
+      return `"${str}"`;
+    };
+    const money = (cents: number | undefined) => {
+      if (cents === undefined || isNaN(cents)) return "0.00";
+      return (cents / 100).toFixed(2);
+    };
+
+    const lines: string[] = [];
+
+    // Header metadata banner
+    lines.push(`=== PRO E BOOKS COMPLETE COMPANY BACKUP ===`);
+    lines.push(`Company Name,${esc(state.companyName)}`);
+    lines.push(`Export Timestamp,${esc(new Date().toISOString())}`);
+    lines.push(`Base Currency,USD`);
+    lines.push(`Locked Through Date,${esc(state.lockedThroughDate || "None (Open)")}`);
+    lines.push(`Total Accounts,${state.accounts.length}`);
+    lines.push(`Total Customers,${state.customers.length}`);
+    lines.push(`Total Vendors,${state.vendors.length}`);
+    lines.push(`Total Invoices,${state.invoices.length}`);
+    lines.push(`Total Expenses & Bills,${state.expenses.length}`);
+    lines.push(`Total Journal Entries,${state.journalEntries.length}`);
+    lines.push(`Total Bank Feeds,${state.bankTransactions.length}`);
+    lines.push("");
+
+    // Section 1: Chart of Accounts
+    lines.push(`=== SECTION 1: CHART OF ACCOUNTS ===`);
+    lines.push(`Account ID,Code,Account Name,Classification,Detail Type,Pro E Books Balance ($),Bank Balance ($)`);
+    for (const a of (state.accountsWithBalances || state.accounts)) {
+      lines.push(`${esc(a.id)},${esc(a.code)},${esc(a.name)},${esc(a.type)},${esc(a.detailType)},${money(a.balanceCents)},${money(a.bankBalanceCents ?? a.balanceCents)}`);
+    }
+    lines.push("");
+
+    // Section 2: Customers
+    lines.push(`=== SECTION 2: CUSTOMERS DIRECTORY ===`);
+    lines.push(`Customer ID,Customer Name,First Name,Last Name,Company,Email,Phone,Tax ID,Billing Address,Open Balance ($)`);
+    for (const c of state.customers) {
+      const openBal = state.invoices
+        .filter((i) => i.customerId === c.id)
+        .reduce((sum, i) => sum + i.balanceDueCents, 0);
+      const addr = formatPostalAddress(c.address);
+      lines.push(`${esc(c.id)},${esc(c.name)},${esc(c.firstName || "")},${esc(c.lastName || "")},${esc(c.company || "")},${esc(c.email || "")},${esc(c.phone || "")},${esc(c.taxId || "")},${esc(addr)},${money(openBal)}`);
+    }
+    lines.push("");
+
+    // Section 3: Vendors
+    lines.push(`=== SECTION 3: VENDORS DIRECTORY ===`);
+    lines.push(`Vendor ID,Vendor Name,Tax ID / EIN,Default Expense Category,Email,Phone,Mailing Address,Open Bill Balance ($)`);
+    for (const v of state.vendors) {
+      const openBills = state.expenses
+        .filter((e) => e.vendorId === v.id && e.type === "Bill" && e.status !== "Paid")
+        .reduce((sum, e) => sum + e.amountCents, 0);
+      const addr = formatPostalAddress(v.address);
+      lines.push(`${esc(v.id)},${esc(v.name)},${esc(v.taxId || "")},${esc(v.defaultExpenseAccountId || "")},${esc(v.email || "")},${esc(v.phone || "")},${esc(addr)},${money(openBills)}`);
+    }
+    lines.push("");
+
+    // Section 4: Products & Services
+    lines.push(`=== SECTION 4: PRODUCTS & SERVICES ===`);
+    lines.push(`SKU,Item Name,Type,Sales Description,Income Account ID,Income Account Name,Sales Price / Rate ($)`);
+    for (const p of state.productsAndServices) {
+      lines.push(`${esc(p.sku)},${esc(p.name)},${esc(p.type)},${esc(p.description)},${esc(p.incomeAccountId)},${esc(p.incomeAccountName)},${money(p.rateCents)}`);
+    }
+    lines.push("");
+
+    // Section 5: Invoices
+    lines.push(`=== SECTION 5: INVOICES ===`);
+    lines.push(`Invoice ID,Invoice #,Customer ID,Customer Name,Invoice Date,Due Date,Subtotal ($),Sales Tax ($),Total Amount ($),Balance Due ($),Status,Line Items Summary`);
+    for (const inv of state.invoices) {
+      const linesSummary = inv.lines.map((l) => `${l.quantity}x ${l.description} @ $${money(l.rateCents)} = $${money(l.amountCents)}`).join(" | ");
+      const subtotal = inv.totalCents - (inv.taxCents ?? 0);
+      lines.push(`${esc(inv.id)},${esc(inv.invoiceNumber)},${esc(inv.customerId)},${esc(inv.customerName)},${esc(inv.date)},${esc(inv.dueDate)},${money(subtotal)},${money(inv.taxCents ?? 0)},${money(inv.totalCents)},${money(inv.balanceDueCents)},${esc(inv.status)},${esc(linesSummary)}`);
+    }
+    lines.push("");
+
+    // Section 6: Estimates
+    lines.push(`=== SECTION 6: ESTIMATES & QUOTES ===`);
+    lines.push(`Estimate ID,Estimate #,Customer ID,Customer Name,Date,Expiration Date,Total Amount ($),Status,Converted To Invoice ID`);
+    for (const est of state.estimates) {
+      lines.push(`${esc(est.id)},${esc(est.estimateNumber)},${esc(est.customerId)},${esc(est.customerName)},${esc(est.date)},${esc(est.expirationDate)},${money(est.totalCents)},${esc(est.status)},${esc(est.convertedInvoiceId || "")}`);
+    }
+    lines.push("");
+
+    // Section 7: Expenses & Vendor Bills
+    lines.push(`=== SECTION 7: EXPENSES & VENDOR BILLS ===`);
+    lines.push(`Expense ID,Transaction Type,Ref #,Date,Due Date,Vendor ID,Payee Name,Payment Account ID,Category Account ID,Category Account Name,Description / Memo,Amount ($),Status`);
+    for (const exp of state.expenses) {
+      lines.push(`${esc(exp.id)},${esc(exp.type)},${esc(exp.refNumber)},${esc(exp.date)},${esc(exp.dueDate || "")},${esc(exp.vendorId || "")},${esc(exp.vendorName)},${esc(exp.paymentAccountId)},${esc(exp.categoryAccountId)},${esc(exp.categoryAccountName)},${esc(exp.description)},${money(exp.amountCents)},${esc(exp.status)}`);
+    }
+    lines.push("");
+
+    // Section 8: General Journal Entries (Double-Entry Ledger)
+    lines.push(`=== SECTION 8: GENERAL JOURNAL ENTRIES ===`);
+    lines.push(`Entry ID,Entry #,Date,Source Type,Memo,Line ID,Account ID,Account Code,Account Name,Line Description,Entity Name,Debit ($),Credit ($),Reversed By Entry ID`);
+    for (const je of state.journalEntries) {
+      for (const line of je.lines) {
+        lines.push(`${esc(je.id)},${esc(je.entryNumber)},${esc(je.date)},${esc(je.sourceType)},${esc(je.memo)},${esc(line.id)},${esc(line.accountId)},${esc(line.accountCode)},${esc(line.accountName)},${esc(line.description || "")},${esc(line.entityName || "")},${money(line.debitCents)},${money(line.creditCents)},${esc(je.reversedByEntryId || "")}`);
+      }
+    }
+    lines.push("");
+
+    // Section 9: Bank Transactions (Bank Feeds)
+    lines.push(`=== SECTION 9: BANK FEED TRANSACTIONS ===`);
+    lines.push(`Transaction ID,Bank Account ID,Date,Bank Description,Amount ($),Direction,Status,Payee,Assigned Account ID,Matched Invoice ID,Matched Bill ID`);
+    for (const tx of state.bankTransactions) {
+      const direction = tx.amountCents >= 0 ? "money_in" : "money_out";
+      lines.push(`${esc(tx.id)},${esc(tx.bankAccountId)},${esc(tx.date)},${esc(tx.description)},${money(tx.amountCents)},${esc(direction)},${esc(tx.status)},${esc(tx.payee || "")},${esc(tx.suggestedAccountId || "")},${esc(tx.matchedInvoiceId || "")},${esc(tx.matchedBillId || "")}`);
+    }
+    lines.push("");
+
+    // Section 10: Bank Reconciliations
+    lines.push(`=== SECTION 10: BANK RECONCILIATIONS ===`);
+    lines.push(`Reconciliation ID,Bank Account ID,Bank Account Name,Statement Ending Date,Cleared Items Count,Ending Statement Balance ($),Reconciled Timestamp`);
+    for (const rec of state.reconciliations) {
+      lines.push(`${esc(rec.id)},${esc(rec.bankAccountId)},${esc(rec.bankAccountName)},${esc(rec.statementDate)},${rec.clearedCount},${money(rec.endingBalanceCents)},${esc(rec.reconciledAt)}`);
+    }
+    lines.push("");
+
+    // Section 11: Team Members & RBAC
+    lines.push(`=== SECTION 11: TEAM MEMBERS & RBAC ===`);
+    lines.push(`Member ID,Full Name,Email Address,Role,Status`);
+    for (const m of state.teamMembers) {
+      lines.push(`${esc(m.id)},${esc(m.name)},${esc(m.email)},${esc(m.role)},${esc(m.status)}`);
+    }
+    lines.push("");
+
+    // Section 12: Audit Trail Logs
+    lines.push(`=== SECTION 12: SECURITY AUDIT TRAIL LOGS ===`);
+    lines.push(`Log ID,Timestamp,User,Action,Event Details,Amount ($)`);
+    for (const log of state.auditLogs) {
+      lines.push(`${esc(log.id)},${esc(log.timestamp)},${esc(log.user)},${esc(log.action)},${esc(log.details)},${log.amountCents !== undefined ? money(log.amountCents) : ""}`);
+    }
+
+    const csvContent = lines.join("\r\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const safeName = (state.companyName || "pro_e_books").toLowerCase().replace(/[^a-z0-9]/g, "_");
+    a.href = url;
+    a.download = `${safeName}_full_backup.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   function exportFullCompanyJson() {
     const json = JSON.stringify(state, null, 2);
     const blob = new Blob([json], { type: "application/json;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
+    const safeName = (state.companyName || "pro_e_books").toLowerCase().replace(/[^a-z0-9]/g, "_");
     a.href = url;
-    a.download = "craigs_landscaping_qbo_full_backup.json";
+    a.download = `${safeName}_full_backup.json`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -3991,13 +4139,23 @@ export function AuditLogView({ state, runAction }: ViewProps) {
             </button>
           </div>
 
-          <button
-            onClick={exportFullCompanyJson}
-            className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50"
-          >
-            <Download className="h-3.5 w-3.5" />
-            Export Full Company Backup (.JSON)
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={exportFullCompanyCsv}
+              className="inline-flex items-center gap-1.5 rounded-full bg-[#2CA01C] px-3.5 py-1.5 text-xs font-bold text-white hover:bg-[#248217] shadow-2xs transition-colors"
+              title="Download all company data, accounts, customers, vendors, invoices, bills, and ledger in a single CSV file"
+            >
+              <Download className="h-3.5 w-3.5" />
+              Export Full Company Backup (.CSV)
+            </button>
+            <button
+              onClick={exportFullCompanyJson}
+              className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+              title="Download raw JSON developer backup"
+            >
+              .JSON
+            </button>
+          </div>
         </div>
 
         {subTab === "audit" && (
@@ -4320,11 +4478,20 @@ export function AuditLogView({ state, runAction }: ViewProps) {
                 </button>
 
                 <button
-                  onClick={exportFullCompanyJson}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+                  onClick={exportFullCompanyCsv}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-[#2CA01C] px-4 py-2 text-xs font-bold text-white hover:bg-[#248217] transition-colors"
+                  title="Download all company data in a single CSV spreadsheet"
                 >
-                  <Download className="h-3.5 w-3.5 text-[#2CA01C]" />
-                  Export Full Company Backup (.JSON)
+                  <Download className="h-3.5 w-3.5" />
+                  Export Full Company Backup (.CSV)
+                </button>
+
+                <button
+                  onClick={exportFullCompanyJson}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+                  title="Download raw JSON developer backup"
+                >
+                  Backup (.JSON)
                 </button>
               </div>
             </div>

@@ -172,3 +172,27 @@
 - **Verified Production Build & Tests:**
   - 20/20 automated unit tests passing (`npm test`).
   - Next.js 16 production build succeeded across all 9 routes with 0 errors (`npm run build`).
+
+## Phase 17 — Single-File Complete Company Backup (.CSV) Export
+- **Comprehensive Single-File CSV Backup:**
+  - Implemented `exportFullCompanyCsv()` in [`src/components/qbo/qbo-views.tsx`](../src/components/qbo/qbo-views.tsx) that compiles every single company record into one structured, RFC 4180-compliant `.CSV` spreadsheet file.
+  - Sections included with dedicated headers and formatted currency:
+    1. **Metadata Banner:** Company Name, Export Timestamp, Base Currency, Locked Through Date, Record Counts.
+    2. **Chart of Accounts:** Account ID, Code, Name, Classification, Detail Type, Balance USD, Bank Balance USD.
+    3. **Customers Directory:** Customer ID, Display Name, First/Last Name, Company, Email, Phone, Tax ID, Address, Open Balance USD.
+    4. **Vendors Directory:** Vendor ID, Display Name, Tax ID / EIN, Default Expense Category, Contact info, Mailing Address, Open Bill Balance USD.
+    5. **Products & Services:** SKU, Item Name, Type, Description, Income Account ID/Name, Sales Price / Rate USD.
+    6. **Invoices:** Invoice ID, Number, Customer ID/Name, Invoice Date, Due Date, Subtotal, Sales Tax, Total Amount, Balance Due, Status, and detailed Line Items breakdown.
+    7. **Estimates & Quotes:** Estimate ID, Number, Customer ID/Name, Date, Expiration Date, Total Amount, Status, Converted Invoice ID.
+    8. **Expenses & Vendor Bills:** Expense ID, Type, Ref #, Date, Due Date, Vendor ID/Name, Payment Account, Category Account, Description/Memo, Amount, Status.
+    9. **General Journal Entries:** Double-entry journal records showing Entry ID, Entry #, Date, Source Type, Memo, Line ID, Account ID, Code, Name, Description, Entity, Debit USD, Credit USD, Reversal links.
+    10. **Bank Feed Transactions:** Transaction ID, Bank Account ID, Date, Description, Amount, Direction (Money In / Money Out), Status, Payee, Suggested Account ID, Match links.
+    11. **Bank Reconciliations:** Reconciliation ID, Bank Account Name, Statement Date, Cleared Count, Ending Balance, Reconciled Timestamp.
+    12. **Team Members & RBAC:** Member ID, Name, Email, Role, Status.
+    13. **Security Audit Trail Logs:** Log ID, Timestamp, User, Action, Event Details, Amount.
+  - Added primary **"Export Full Company Backup (.CSV)"** download button in both the top toolbar and bottom action row of the **Audit, Teams & Security** view.
+  - Maintained optional **.JSON** backup button for raw database restoration.
+- **Verified Production Build & Tests:**
+  - 20/20 automated tests passing (`npm test`).
+  - Next.js 16.4.3 production build (`npm run build`) succeeded across all 9 routes.
+  - Code remains local (NOT pushed to GitHub as requested).
