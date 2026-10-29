@@ -4072,34 +4072,45 @@ export function AuditLogView({ state, runAction }: ViewProps) {
           </p>
         </div>
 
-        {state.teamMembers && state.teamMembers.length > 1 && (
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-slate-600">
-              Active Role:
-            </span>
-            {Array.from(new Set(state.teamMembers.map((m) => m.role))).map((r) => (
-              <button
-                key={r}
-                onClick={() =>
-                  runAction(
-                    "set_active_role",
-                    { role: r },
-                    r === "accountant"
-                      ? "Switched to Accountant (Read-Only) mode — mutations are now blocked!"
-                      : `Switched to ${r.toUpperCase()} role`
-                  )
-                }
-                className={`rounded-full px-3 py-1 text-xs font-bold capitalize transition-colors ${
-                  state.activeRole === r
-                    ? "bg-[#2CA01C] text-white"
-                    : "bg-white border border-slate-300 text-slate-700 hover:bg-slate-50"
-                }`}
-              >
-                {r === "accountant" ? "Accountant (Read-Only)" : r}
-              </button>
-            ))}
-          </div>
-        )}
+        {(() => {
+          const validMembers = (state.teamMembers || []).filter(
+            (m) =>
+              m.name !== "Sarah Jenkins" &&
+              m.name !== "Arthur Andersen, CPA" &&
+              !m.email.includes("bayareacpa.com") &&
+              m.email !== "sarah@enterandpost.com" &&
+              m.email !== "sarah@craigslandscaping.com"
+          );
+          if (validMembers.length <= 1) return null;
+          return (
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-slate-600">
+                Active Role:
+              </span>
+              {Array.from(new Set(validMembers.map((m) => m.role))).map((r) => (
+                <button
+                  key={r}
+                  onClick={() =>
+                    runAction(
+                      "set_active_role",
+                      { role: r },
+                      r === "accountant"
+                        ? "Switched to Accountant (Read-Only) mode — mutations are now blocked!"
+                        : `Switched to ${r.toUpperCase()} role`
+                    )
+                  }
+                  className={`rounded-full px-3 py-1 text-xs font-bold capitalize transition-colors ${
+                    state.activeRole === r
+                      ? "bg-[#2CA01C] text-white"
+                      : "bg-white border border-slate-300 text-slate-700 hover:bg-slate-50"
+                  }`}
+                >
+                  {r === "accountant" ? "Accountant (Read-Only)" : r}
+                </button>
+              ))}
+            </div>
+          );
+        })()}
       </div>
 
       {/* Sub-navigation */}
@@ -4287,7 +4298,16 @@ export function AuditLogView({ state, runAction }: ViewProps) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {state.teamMembers.map((m) => (
+                {state.teamMembers
+                  .filter(
+                    (m) =>
+                      m.name !== "Sarah Jenkins" &&
+                      m.name !== "Arthur Andersen, CPA" &&
+                      !m.email.includes("bayareacpa.com") &&
+                      m.email !== "sarah@enterandpost.com" &&
+                      m.email !== "sarah@craigslandscaping.com"
+                  )
+                  .map((m) => (
                   <tr key={m.id} className="hover:bg-slate-50/50">
                     <td className="px-4 py-3 font-semibold text-slate-900">
                       {m.name}

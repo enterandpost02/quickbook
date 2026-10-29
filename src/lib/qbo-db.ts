@@ -140,6 +140,14 @@ async function ensureCacheInitialized(): Promise<void> {
         if (snap.stateJson) {
           const ledger = snap.stateJson;
           if (ledger.teamMembers) {
+            ledger.teamMembers = ledger.teamMembers.filter(
+              (m) =>
+                m.name !== "Sarah Jenkins" &&
+                m.name !== "Arthur Andersen, CPA" &&
+                !m.email.includes("bayareacpa.com") &&
+                m.email !== "sarah@enterandpost.com" &&
+                m.email !== "sarah@craigslandscaping.com"
+            );
             for (const member of ledger.teamMembers) {
               if (
                 member.role === "owner" &&
@@ -148,6 +156,17 @@ async function ensureCacheInitialized(): Promise<void> {
                 member.name = "Enter & Post Admin";
                 member.email = "enterandpost02@gmail.com";
               }
+            }
+            if (ledger.teamMembers.length === 0) {
+              ledger.teamMembers = [
+                {
+                  id: "tm-1",
+                  name: "Enter & Post Admin",
+                  email: "enterandpost02@gmail.com",
+                  role: "owner",
+                  status: "Active",
+                },
+              ];
             }
           }
           ledgersMap.set(snap.organizationId, ledger);

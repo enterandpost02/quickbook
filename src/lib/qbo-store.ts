@@ -1489,20 +1489,6 @@ export function createInitialSeedData(customCompanyName?: string): QboStoreData 
       role: "owner",
       status: "Active",
     },
-    {
-      id: "tm-2",
-      name: "Sarah Jenkins",
-      email: "sarah@enterandpost.com",
-      role: "staff",
-      status: "Active",
-    },
-    {
-      id: "tm-3",
-      name: "Arthur Andersen, CPA",
-      email: "a.andersen@bayareacpa.com",
-      role: "accountant",
-      status: "Active",
-    },
   ];
 
   return {

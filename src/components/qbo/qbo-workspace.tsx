@@ -699,12 +699,21 @@ export function QboWorkspace({
               </button>
 
               {showUserMenu && (() => {
-                const sanitizedMembers = (state.teamMembers || []).map((m) => {
-                  if (m.role === "owner" && (m.name === "Craig Carlson" || m.email.includes("craig"))) {
-                    return { ...m, name: "Enter & Post Admin", email: "enterandpost02@gmail.com" };
-                  }
-                  return m;
-                });
+                const sanitizedMembers = (state.teamMembers || [])
+                  .filter(
+                    (m) =>
+                      m.name !== "Sarah Jenkins" &&
+                      m.name !== "Arthur Andersen, CPA" &&
+                      !m.email.includes("bayareacpa.com") &&
+                      m.email !== "sarah@enterandpost.com" &&
+                      m.email !== "sarah@craigslandscaping.com"
+                  )
+                  .map((m) => {
+                    if (m.role === "owner" && (m.name === "Craig Carlson" || m.email.includes("craig"))) {
+                      return { ...m, name: "Enter & Post Admin", email: "enterandpost02@gmail.com" };
+                    }
+                    return m;
+                  });
                 const activeMember = sanitizedMembers.find((m) => m.role === state.activeRole) || sanitizedMembers[0];
                 const displayName = currentUser?.fullName || activeMember?.name || "Enter & Post Admin";
                 const displayEmail = currentUser?.email || activeMember?.email || "enterandpost02@gmail.com";
