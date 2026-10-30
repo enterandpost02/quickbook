@@ -52,12 +52,16 @@ function getSmtpConfig() {
     process.env.SMTP_USER ||
     DEFAULT_SENDER_EMAIL;
   const fromHeader = `"${DEFAULT_SENDER_NAME}" <${fromEmail}>`;
-  const smtpPass =
+  const rawPass =
     process.env.GMAIL_APP_PASSWORD ||
     process.env.SMTP_PASS ||
     process.env.EMAIL_PASSWORD;
   const smtpHost = process.env.SMTP_HOST || "smtp.gmail.com";
   const smtpPort = Number(process.env.SMTP_PORT || 465);
+  const smtpPass =
+    rawPass && smtpHost.includes("gmail.com")
+      ? rawPass.replace(/\s+/g, "")
+      : rawPass;
 
   return {
     fromEmail,
