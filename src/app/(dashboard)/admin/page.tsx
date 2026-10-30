@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { connection } from "next/server";
 import { requireSuperAdmin } from "@/lib/auth";
 import { getPlatformAdminOverview } from "@/lib/admin";
 import { GodfatherAdminConsole } from "@/components/admin/godfather-console";
@@ -6,6 +7,7 @@ import { GodfatherAdminConsole } from "@/components/admin/godfather-console";
 export const instant = false;
 
 async function AdminDataLoader() {
+  await connection();
   const auth = await requireSuperAdmin();
   const initialOverview = await getPlatformAdminOverview();
 

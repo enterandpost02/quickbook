@@ -1,9 +1,5 @@
 import { NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
-import { getDb } from "@/db";
-import { sessions } from "@/db/schema";
 import { getCurrentAuth } from "@/lib/auth";
-import { setActiveOrgCookieSafe } from "@/lib/qbo-db";
 import {
   adminCreateOrAssignUser,
   adminCreateOrganizationAndOwner,
@@ -50,26 +46,6 @@ export async function POST(request: Request) {
     const { action, payload } = body;
 
     switch (action) {
-      case "inspect_organization": {
-        const targetOrgId = String(payload?.organizationId ?? "");
-        if (!targetOrgId) {
-          return NextResponse.json(
-            { error: "Organization ID is required." },
-            { status: 400 }
-          );
-        }
-        const db = await getDb();
-        await db
-          .update(sessions)
-          .set({ activeOrganizationId: targetOrgId })
-          .where(eq(sessions.id, auth.sessionId));
-        await setActiveOrgCookieSafe(targetOrgId);
-        return NextResponse.json({
-          success: true,
-          redirectTo: "/dashboard",
-        });
-      }
-
       case "toggle_org_suspension": {
         await adminToggleOrganizationSuspension(
           String(payload.organizationId),

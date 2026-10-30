@@ -56,14 +56,22 @@ export async function GET() {
     );
   }
 
-  const allowedOrgIds = auth.isSuperAdmin
-    ? undefined
-    : auth.memberships.map((m) => m.organization.id);
+  if (auth.isSuperAdmin) {
+    return NextResponse.json(
+      {
+        error:
+          "Forbidden: Platform Super Admin manages tenants and users from /admin and cannot open customer ledgers or workspaces.",
+      },
+      { status: 403 }
+    );
+  }
+
+  const allowedOrgIds = auth.memberships.map((m) => m.organization.id);
 
   const { state } = await loadQboStoreFromDb(auth.organization.id, {
     allowedOrgIds,
   });
-  state.activeRole = auth.isSuperAdmin ? "owner" : auth.role;
+  state.activeRole = auth.role;
   return NextResponse.json(state);
 }
 
@@ -77,12 +85,20 @@ export async function POST(request: Request) {
       );
     }
 
+    if (auth.isSuperAdmin) {
+      return NextResponse.json(
+        {
+          error:
+            "Forbidden: Platform Super Admin manages tenants and users from /admin and cannot open or modify customer ledgers or workspaces.",
+        },
+        { status: 403 }
+      );
+    }
+
     const body = await request.json();
     const { action, payload, previewRole } = body;
 
-    const allowedOrgIds = auth.isSuperAdmin
-      ? undefined
-      : auth.memberships.map((m) => m.organization.id);
+    const allowedOrgIds = auth.memberships.map((m) => m.organization.id);
 
     if (action === "switch_organization") {
       const targetOrgId = String(payload?.organizationId ?? "");
@@ -96,7 +112,7 @@ export async function POST(request: Request) {
       const targetMembership = auth.memberships.find(
         (m) => m.organization.id === targetOrgId
       );
-      if (!auth.isSuperAdmin && !targetMembership) {
+      if (!targetMembership) {
         return NextResponse.json(
           { error: "Forbidden: You do not have access to that organization." },
           { status: 403 }
@@ -113,14 +129,12 @@ export async function POST(request: Request) {
       const { state } = await loadQboStoreFromDb(targetOrgId, {
         allowedOrgIds,
       });
-      state.activeRole = auth.isSuperAdmin
-        ? "owner"
-        : (targetMembership?.role ?? "accountant");
+      state.activeRole = targetMembership.role;
       return NextResponse.json(state);
     }
 
     if (action === "create_organization") {
-      if (!auth.isSuperAdmin && auth.role !== "owner") {
+      if (auth.role !== "owner") {
         return NextResponse.json(
           {
             error:
@@ -135,14 +149,12 @@ export async function POST(request: Request) {
         template: payload.template ?? "empty",
         industry: payload.industry,
         taxId: payload.taxId,
-        ownerUserId: auth.isSuperAdmin ? undefined : auth.user.id,
-        ownerInfo: auth.isSuperAdmin
-          ? undefined
-          : {
-              id: auth.user.id,
-              name: auth.user.fullName,
-              email: auth.user.email,
-            },
+        ownerUserId: auth.user.id,
+        ownerInfo: {
+          id: auth.user.id,
+          name: auth.user.fullName,
+          email: auth.user.email,
+        },
       });
 
       const db = await getDb();
@@ -151,9 +163,7 @@ export async function POST(request: Request) {
         .set({ activeOrganizationId: newOrgId })
         .where(eq(sessions.id, auth.sessionId));
 
-      const updatedAllowedOrgIds = allowedOrgIds
-        ? [...allowedOrgIds, newOrgId]
-        : undefined;
+      const updatedAllowedOrgIds = [...allowedOrgIds, newOrgId];
       const { state } = await loadQboStoreFromDb(newOrgId, {
         allowedOrgIds: updatedAllowedOrgIds,
       });
@@ -166,7 +176,7 @@ export async function POST(request: Request) {
     });
 
     // Strict Server-Side Role-Based Authorization (RBAC)
-    const effectiveRole = auth.isSuperAdmin ? "owner" : auth.role;
+    const effectiveRole = auth.role;
     const isRoleSwitchAction =
       action === "set_active_role" || action === "switch_role";
 

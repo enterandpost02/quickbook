@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { cookies } from "next/headers";
+import { connection } from "next/server";
 import { redirect } from "next/navigation";
 import { and, asc, eq, gt } from "drizzle-orm";
 import { getDb } from "@/db";
@@ -294,16 +295,6 @@ export async function resolveAuthFromRawToken(
   }
 
   if (isSuper) {
-    const allOrgs = await db
-      .select()
-      .from(organizations)
-      .orderBy(asc(organizations.createdAt));
-
-    const activeOrg =
-      allOrgs.find((o) => o.id === row.organization.id) ??
-      row.organization ??
-      allOrgs[0];
-
     return {
       sessionId: row.session.id,
       user: {
@@ -316,12 +307,10 @@ export async function resolveAuthFromRawToken(
         createdAt: row.user.createdAt,
       },
       isSuperAdmin: true,
-      organization: activeOrg,
+      organization: row.organization,
       role: "owner",
-      memberships: allOrgs.map((org) => ({
-        organization: org,
-        role: "owner" as OrganizationRole,
-      })),
+      // Super Admin governs tenants & users via /admin only and does not open customer ledgers/workspaces
+      memberships: [],
     };
   }
 
@@ -378,13 +367,9 @@ export async function resolveAuthFromRawToken(
 }
 
 export async function getCurrentAuth(): Promise<AuthContext | null> {
-  let rawToken: string | undefined;
-  try {
-    const cookieStore = await cookies();
-    rawToken = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-  } catch {
-    return null;
-  }
+  await connection();
+  const cookieStore = await cookies();
+  const rawToken = cookieStore.get(SESSION_COOKIE_NAME)?.value;
   if (!rawToken) return null;
   return resolveAuthFromRawToken(rawToken);
 }

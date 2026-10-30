@@ -1,19 +1,25 @@
+import { Suspense } from "react";
+import { connection } from "next/server";
 import { redirect } from "next/navigation";
 import { BookOpenCheck, ShieldCheck } from "lucide-react";
 import { getCurrentAuth } from "@/lib/auth";
 
 export const instant = false;
 
-export default async function AuthLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+async function AuthSessionGuard({ children }: { children: React.ReactNode }) {
+  await connection();
   const auth = await getCurrentAuth();
   if (auth) {
     redirect(auth.isSuperAdmin ? "/admin" : "/dashboard");
   }
+  return <>{children}</>;
+}
 
+export default function AuthLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col justify-center py-8 sm:py-12 px-4 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
@@ -37,7 +43,15 @@ export default async function AuthLayout({
       </div>
 
       <div className="mt-6 sm:mt-8 sm:mx-auto sm:w-full sm:max-w-md w-full">
-        {children}
+        <Suspense
+          fallback={
+            <div className="rounded-xl border border-slate-200 bg-white p-8 text-center text-xs text-slate-500 shadow-sm">
+              Loading authentication...
+            </div>
+          }
+        >
+          <AuthSessionGuard>{children}</AuthSessionGuard>
+        </Suspense>
       </div>
     </div>
   );

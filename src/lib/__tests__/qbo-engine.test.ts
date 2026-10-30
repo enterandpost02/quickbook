@@ -1141,7 +1141,7 @@ describe("QuickBooks Double-Entry Accounting Engine & CSV Suite", () => {
         "Alpha Logistics Corp"
       );
 
-      // 2. Godfather Super Admin session sees ALL organizations across the entire software
+      // 2. Godfather Super Admin session governs platform tenants/users via /admin overview (zero customer ledger memberships)
       const godfatherSession = await createSessionRecordInDb(
         godfather.user.id,
         tenantA.organizationId
@@ -1151,7 +1151,7 @@ describe("QuickBooks Double-Entry Accounting Engine & CSV Suite", () => {
       );
       assert.ok(godfatherAuth);
       assert.equal(godfatherAuth.isSuperAdmin, true);
-      assert.ok(godfatherAuth.memberships.length >= 2);
+      assert.equal(godfatherAuth.memberships.length, 0);
 
       const overview = await getPlatformAdminOverview();
       assert.ok(

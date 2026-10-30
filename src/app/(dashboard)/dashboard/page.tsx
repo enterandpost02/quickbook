@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { connection } from "next/server";
 import { redirect } from "next/navigation";
 import { getCurrentAuth } from "@/lib/auth";
 import { loadQboStoreFromDb } from "@/lib/qbo-db";
@@ -7,20 +8,25 @@ import { QboWorkspace } from "@/components/qbo/qbo-workspace";
 export const instant = false;
 
 async function DashboardDataLoader() {
+  await connection();
   const auth = await getCurrentAuth();
   if (!auth) {
     redirect("/login");
   }
 
-  const allowedOrgIds = auth.isSuperAdmin
-    ? undefined
-    : auth.memberships.map((m) => m.organization.id);
+  // Platform Super Admin ("Godfather") manages platform tenants & users at /admin only,
+  // and must never open customer ledgers or bookkeeping workspaces.
+  if (auth.isSuperAdmin) {
+    redirect("/admin");
+  }
+
+  const allowedOrgIds = auth.memberships.map((m) => m.organization.id);
 
   const { state: initialState } = await loadQboStoreFromDb(
     auth.organization.id,
     { allowedOrgIds }
   );
-  initialState.activeRole = auth.isSuperAdmin ? "owner" : auth.role;
+  initialState.activeRole = auth.role;
 
   return (
     <QboWorkspace
@@ -29,8 +35,7 @@ async function DashboardDataLoader() {
         id: auth.user.id,
         email: auth.user.email,
         fullName: auth.user.fullName,
-        role: auth.isSuperAdmin ? "owner" : auth.role,
-        isSuperAdmin: auth.isSuperAdmin,
+        role: auth.role,
       }}
     />
   );

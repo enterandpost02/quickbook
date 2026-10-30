@@ -2,13 +2,11 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import {
-  ArrowLeft,
   BookOpenCheck,
   Building2,
   Check,
   CheckCircle2,
   ChevronDown,
-  Crown,
   FileSpreadsheet,
   FileText,
   History,
@@ -55,7 +53,6 @@ export interface CurrentUserSession {
   email?: string;
   fullName?: string;
   role?: "owner" | "staff" | "accountant";
-  isSuperAdmin?: boolean;
 }
 
 export function QboWorkspace({
@@ -176,9 +173,7 @@ export function QboWorkspace({
     }, 4000);
   }
 
-  const isAuthenticatedOwner = Boolean(
-    currentUser?.isSuperAdmin || (currentUser?.role ?? "owner") === "owner"
-  );
+  const isAuthenticatedOwner = (currentUser?.role ?? "owner") === "owner";
 
   async function runAction(
     action: string,
@@ -424,26 +419,6 @@ export function QboWorkspace({
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Godfather Super Admin Inspection Banner (Hidden for regular Company Owners) */}
-        {currentUser?.isSuperAdmin && (
-          <div className="bg-slate-950 text-amber-300 border-b border-amber-500/30 px-3 sm:px-6 py-1.5 flex flex-wrap items-center justify-between gap-2 text-xs z-40">
-            <div className="flex items-center gap-2 font-semibold min-w-0">
-              <Crown className="h-3.5 w-3.5 text-amber-400 shrink-0" />
-              <span className="truncate">
-                Godfather Super Admin Mode · Inspecting{" "}
-                <strong className="text-white">{state.companyName}</strong>
-              </span>
-            </div>
-            <a
-              href="/admin"
-              className="inline-flex items-center gap-1 rounded-full bg-amber-400/15 border border-amber-400/40 px-2.5 py-0.5 text-[11px] font-bold text-amber-200 hover:bg-amber-400/25 transition-colors shrink-0"
-            >
-              <ArrowLeft className="h-3 w-3" />
-              Back to Godfather Console
-            </a>
-          </div>
-        )}
-
         {/* Top White QBO App Bar */}
         <header className="h-14 bg-white border-b border-slate-200 px-3 sm:px-6 flex items-center justify-between sticky top-0 z-30">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
@@ -714,11 +689,7 @@ export function QboWorkspace({
                 className="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 hover:bg-slate-100 pl-1 pr-2.5 py-1 transition-colors"
                 title="User Profile & Session"
               >
-                <div
-                  className={`flex h-7 w-7 items-center justify-center rounded-full text-white text-xs font-bold ${
-                    currentUser?.isSuperAdmin ? "bg-amber-500 text-slate-950" : "bg-[#0077C5]"
-                  }`}
-                >
+                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#0077C5] text-white text-xs font-bold">
                   {(
                     currentUser?.fullName ||
                     state.teamMembers.find((m) => m.role === state.activeRole)?.name ||
@@ -766,16 +737,8 @@ export function QboWorkspace({
                         </p>
                       )}
                       <div className="mt-2 flex items-center gap-1.5">
-                        <span
-                          className={`rounded px-2 py-0.5 text-[10px] font-bold uppercase ${
-                            currentUser?.isSuperAdmin
-                              ? "bg-amber-400 text-slate-950"
-                              : "bg-[#2CA01C] text-white"
-                          }`}
-                        >
-                          {currentUser?.isSuperAdmin
-                            ? "Super Admin (Godfather)"
-                            : state.activeRole === "accountant"
+                        <span className="rounded bg-[#2CA01C] px-2 py-0.5 text-[10px] font-bold uppercase text-white">
+                          {state.activeRole === "accountant"
                             ? "Accountant (Read-Only)"
                             : state.activeRole === "staff"
                             ? "Staff Bookkeeper"
@@ -838,9 +801,7 @@ export function QboWorkspace({
                             Authenticated Role:
                           </span>
                           <span className="text-[10px] font-bold text-[#2CA01C] bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
-                            {currentUser?.isSuperAdmin
-                              ? "Super Admin"
-                              : state.activeRole === "accountant"
+                            {state.activeRole === "accountant"
                               ? "Accountant (Read-Only)"
                               : state.activeRole === "staff"
                               ? "Staff Bookkeeper (Active)"
@@ -857,15 +818,6 @@ export function QboWorkspace({
                     )}
 
                     <div className="p-2 bg-slate-50 flex flex-col gap-1">
-                      {currentUser?.isSuperAdmin && (
-                        <a
-                          href="/admin"
-                          className="w-full flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs font-bold text-amber-900 bg-amber-100 hover:bg-amber-200/80 border border-amber-300 text-left transition-colors"
-                        >
-                          <Crown className="h-3.5 w-3.5 text-amber-700 shrink-0" />
-                          Godfather Admin Console (/admin)
-                        </a>
-                      )}
                       {isAuthenticatedOwner && (
                         <button
                           type="button"
