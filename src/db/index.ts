@@ -22,13 +22,26 @@ type GlobalDbCache = {
 const globalForDb = globalThis as unknown as GlobalDbCache;
 
 function createDatabase(): { db: AppDatabase; isLocalPglite: boolean } {
-  const connectionString = process.env.DATABASE_URL?.trim();
+  const connectionString = process.env.DATABASE_URL?.trim().replace(
+    /^["']|["']$/g,
+    ""
+  );
 
   if (connectionString) {
     // prepare: false ensures compatibility with Supabase Supavisor transaction pooler (port 6543)
-    const client = postgres(connectionString, { prepare: false });
+    const client = postgres(connectionString, {
+      prepare: false,
+      max: process.env.VERCEL ? 3 : 10,
+      idle_timeout: 20,
+    });
     const db = drizzlePostgres(client, { schema });
     return { db, isLocalPglite: false };
+  }
+
+  if (process.env.VERCEL) {
+    throw new Error(
+      "DATABASE_URL is not configured. Add DATABASE_URL in Vercel Project Settings -> Environment Variables and redeploy."
+    );
   }
 
   const dataDir =
@@ -75,6 +88,7 @@ async function ensurePlatformSchemaBootstrap(db: AppDatabase): Promise<void> {
   await db.execute(sql`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "is_super_admin" boolean DEFAULT false NOT NULL`);
   await db.execute(sql`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "email_verified" boolean DEFAULT true NOT NULL`);
   await db.execute(sql`ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "is_suspended" boolean DEFAULT false NOT NULL`);
+  await db.execute(sql`ALTER TABLE "sessions" ALTER COLUMN "active_organization_id" DROP NOT NULL`);
 }
 
 /**

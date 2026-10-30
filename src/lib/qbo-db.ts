@@ -12,11 +12,9 @@ import {
 } from "@/db/schema";
 import {
   createFreshCompanyData,
-  createInitialSeedData,
   getComputedQboState,
   getRawStore,
   hydrateQboStore,
-  resetQboStore,
   type ComputedQboState,
   type InitialOwnerInfo,
   type QboStoreData,
@@ -27,7 +25,6 @@ import {
   isSuperAdminEmail,
 } from "@/lib/auth";
 
-const DEFAULT_ORG_SLUG = "craigs-design-and-landscaping";
 export const ACTIVE_ORG_COOKIE = "qbo_active_org_id";
 
 export type OrgSummary = { id: string; name: string; slug: string };
@@ -113,13 +110,7 @@ function sanitizeLegacyTeamMembers(ledger: QboStoreData): void {
     ledger.teamMembers = [];
   }
   ledger.teamMembers = ledger.teamMembers.filter(
-    (m) =>
-      !isSuperAdminEmail(m.email) &&
-      m.name !== "Sarah Jenkins" &&
-      m.name !== "Arthur Andersen, CPA" &&
-      !m.email.includes("bayareacpa.com") &&
-      m.email !== "sarah@enterandpost.com" &&
-      m.email !== "sarah@craigslandscaping.com"
+    (m) => !isSuperAdminEmail(m.email)
   );
   if (ledger.teamMembers.length === 0) {
     ledger.teamMembers = [
@@ -136,13 +127,10 @@ function sanitizeLegacyTeamMembers(ledger: QboStoreData): void {
 
 /**
  * Warms the in-memory multi-company cache from PostgreSQL once per server lifecycle.
+ * Never creates sample or demo organizations when the database is empty.
  */
 async function ensureCacheInitialized(): Promise<void> {
-  if (
-    globalCache.initialized &&
-    globalCache.orgs &&
-    globalCache.orgs.length > 0
-  ) {
+  if (globalCache.initialized && globalCache.orgs) {
     return;
   }
   if (globalCache.initPromise) {
@@ -167,52 +155,25 @@ async function ensureCacheInitialized(): Promise<void> {
 
     const ledgersMap = getLedgersMap();
 
-    if (allOrgs.length === 0) {
-      const seed = createInitialSeedData();
-      const [createdDefault] = await db
-        .insert(organizations)
-        .values({
-          name: seed.companyName,
-          slug: DEFAULT_ORG_SLUG,
-          baseCurrency: "USD",
-          fiscalYearStartMonth: 1,
-          lockedThroughDate: seed.lockedThroughDate,
-        })
-        .returning();
+    globalCache.orgs = allOrgs.map((o) => ({
+      id: o.id,
+      name: o.name,
+      slug: o.slug,
+    }));
 
-      globalCache.orgs = [
-        {
-          id: createdDefault.id,
-          name: createdDefault.name,
-          slug: createdDefault.slug,
-        },
-      ];
-      ledgersMap.set(createdDefault.id, structuredClone(seed));
-      enqueueBackgroundDbSync(createdDefault.id, seed);
-    } else {
-      globalCache.orgs = allOrgs.map((o) => ({
-        id: o.id,
-        name: o.name,
-        slug: o.slug,
-      }));
-
-      for (const snap of allSnapshots) {
-        if (snap.stateJson) {
-          const ledger = snap.stateJson;
-          sanitizeLegacyTeamMembers(ledger);
-          ledgersMap.set(snap.organizationId, ledger);
-        }
+    for (const snap of allSnapshots) {
+      if (snap.stateJson) {
+        const ledger = snap.stateJson;
+        sanitizeLegacyTeamMembers(ledger);
+        ledgersMap.set(snap.organizationId, ledger);
       }
+    }
 
-      for (const org of globalCache.orgs) {
-        if (!ledgersMap.has(org.id)) {
-          const fallback =
-            org.slug === DEFAULT_ORG_SLUG
-              ? createInitialSeedData(org.name)
-              : createFreshCompanyData(org.name);
-          ledgersMap.set(org.id, fallback);
-          enqueueBackgroundDbSync(org.id, fallback);
-        }
+    for (const org of globalCache.orgs) {
+      if (!ledgersMap.has(org.id)) {
+        const fallback = createFreshCompanyData(org.name);
+        ledgersMap.set(org.id, fallback);
+        enqueueBackgroundDbSync(org.id, fallback);
       }
     }
 
@@ -228,17 +189,16 @@ async function ensureCacheInitialized(): Promise<void> {
 
 /**
  * Registers a newly created organization (e.g. from OTP Signup or Admin Console)
- * immediately into the warm cache and persists its fresh ledger to PostgreSQL.
+ * immediately into the warm cache and persists its fresh $0.00 ledger to PostgreSQL.
  */
 export async function initializeLedgerForNewOrganization(input: {
   organization: OrgSummary;
   ownerInfo: InitialOwnerInfo;
-  template?: "empty" | "sample";
 }): Promise<QboStoreData> {
-  const initialData =
-    input.template === "sample"
-      ? createInitialSeedData(input.organization.name, input.ownerInfo)
-      : createFreshCompanyData(input.organization.name, input.ownerInfo);
+  const initialData = createFreshCompanyData(
+    input.organization.name,
+    input.ownerInfo
+  );
 
   const cloned = structuredClone(initialData);
   // Pre-seed ledgersMap before cache init so ensureCacheInitialized doesn't synthesize a duplicate fallback
@@ -321,13 +281,14 @@ export async function loadQboStoreFromDb(
   const activeOrg =
     candidateList.find((o) => o.id === targetOrgId) ?? candidateList[0];
 
+  if (!activeOrg) {
+    throw new Error("No active organization workspace found.");
+  }
+
   const ledgersMap = getLedgersMap();
   let orgData = ledgersMap.get(activeOrg.id);
   if (!orgData) {
-    orgData =
-      activeOrg.slug === DEFAULT_ORG_SLUG
-        ? resetQboStore()
-        : createFreshCompanyData(activeOrg.name);
+    orgData = createFreshCompanyData(activeOrg.name);
     ledgersMap.set(activeOrg.id, orgData);
   }
 
@@ -364,7 +325,6 @@ export async function loadQboStoreFromDb(
  */
 export async function createOrganizationInDb(input: {
   name: string;
-  template: "empty" | "sample";
   industry?: string;
   taxId?: string;
   ownerUserId?: string;
@@ -376,10 +336,7 @@ export async function createOrganizationInDb(input: {
   const cleanName = input.name.trim() || "New Business LLC";
   const slug = slugifyCompanyName(cleanName);
 
-  const initialData =
-    input.template === "sample"
-      ? createInitialSeedData(cleanName, input.ownerInfo)
-      : createFreshCompanyData(cleanName, input.ownerInfo);
+  const initialData = createFreshCompanyData(cleanName, input.ownerInfo);
 
   if (input.industry || input.taxId) {
     initialData.auditLogs.unshift({

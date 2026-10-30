@@ -25,7 +25,6 @@ import {
   postJournalEntry,
   receiveInvoicePayment,
   removeTeamMemberFromStore,
-  resetQboStore,
   reverseJournalEntry,
   runAiAutoCategorizer,
   setActiveRole,
@@ -146,7 +145,6 @@ export async function POST(request: Request) {
 
       const newOrgId = await createOrganizationInDb({
         name: payload.name,
-        template: payload.template ?? "empty",
         industry: payload.industry,
         taxId: payload.taxId,
         ownerUserId: auth.user.id,
@@ -214,7 +212,6 @@ export async function POST(request: Request) {
 
       const ownerOnlyActions = [
         "wipe_transactions",
-        "reset_demo",
         "set_period_lock",
         "create_organization",
         "invite_team_member",
@@ -448,18 +445,6 @@ export async function POST(request: Request) {
         );
         state.activeRole = effectiveRole;
         return NextResponse.json({ ...state, inviteEmailResult: mailResult });
-      }
-      case "reset_demo": {
-        resetQboStore(
-          auth.isSuperAdmin
-            ? undefined
-            : {
-                id: auth.user.id,
-                name: auth.user.fullName,
-                email: auth.user.email,
-              }
-        );
-        break;
       }
       case "wipe_transactions": {
         wipeAllCompanyTransactions();

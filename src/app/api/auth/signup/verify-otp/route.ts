@@ -28,7 +28,6 @@ export async function POST(request: Request) {
           name: verified.user.fullName,
           email: verified.user.email,
         },
-        template: "empty",
       });
     }
 

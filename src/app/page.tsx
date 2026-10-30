@@ -10,9 +10,9 @@ async function HomeRedirectLoader() {
   const auth = await getCurrentAuth();
   if (auth) {
     redirect(auth.isSuperAdmin ? "/admin" : "/dashboard");
-  } else {
-    redirect("/login");
   }
+  redirect("/login");
+  return null;
 }
 
 export default function HomePage() {

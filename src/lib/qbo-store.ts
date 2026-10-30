@@ -258,15 +258,6 @@ export interface QboStoreData {
   auditLogs: QboAuditLogItem[];
 }
 
-export const SAMPLE_BANK_CSV = `Date,Description,Amount,Payee
-2026-10-20,HOME DEPOT #4412 SPRINKLER VALVES,-248.50,Home Depot
-2026-10-21,STRIPE TRANSFER - FREEMAN SPORTING GOODS,1450.00,Freeman Sporting Goods
-2026-10-22,CHIN'S GAS AND OIL #09,-84.20,Chin's Gas and Oil
-2026-10-23,TANIA'S NURSERY WHOLESALE TREES,-620.00,Tania's Nursery
-2026-10-24,PG&E MONTHLY UTILITY BILL,-195.40,PG&E
-2026-10-25,INTUIT QUICKBOOKS SUBSCRIPTION,-90.00,Intuit
-2026-10-26,CHECK DEPOSIT #1092 AMY BIRD SANCTUARY,875.00,Amy's Bird Sanctuary`;
-
 function makeFingerprint(
   bankAccountId: string,
   date: string,
@@ -284,30 +275,27 @@ export interface InitialOwnerInfo {
   email: string;
 }
 
-export function createInitialSeedData(
-  customCompanyName?: string,
-  ownerInfo?: InitialOwnerInfo
-): QboStoreData {
-  const accounts: QboAccount[] = [
+export function createStandardChartOfAccounts(): QboAccount[] {
+  return [
     // Banking
     {
       id: "acc-1000",
       code: "1000",
-      name: "Business Checking (Chase ••4021)",
+      name: "Business Checking",
       type: "Bank",
       detailType: "Checking",
       normalBalance: "debit",
-      bankBalanceCents: 2841990,
+      bankBalanceCents: 0,
       isActive: true,
     },
     {
       id: "acc-1010",
       code: "1010",
-      name: "Business Savings (Chase ••8810)",
+      name: "Business Savings",
       type: "Bank",
       detailType: "Savings",
       normalBalance: "debit",
-      bankBalanceCents: 1500000,
+      bankBalanceCents: 0,
       isActive: true,
     },
     {
@@ -351,7 +339,7 @@ export function createInitialSeedData(
     {
       id: "acc-1500",
       code: "1500",
-      name: "Trucks & Landscaping Equipment",
+      name: "Vehicles & Equipment",
       type: "Fixed Assets",
       detailType: "Vehicles & Machinery",
       normalBalance: "debit",
@@ -370,11 +358,11 @@ export function createInitialSeedData(
     {
       id: "acc-2100",
       code: "2100",
-      name: "Corporate Platinum Card (Amex ••1004)",
+      name: "Business Credit Card",
       type: "Credit Card",
       detailType: "Credit Card",
       normalBalance: "credit",
-      bankBalanceCents: 149200,
+      bankBalanceCents: 0,
       isActive: true,
     },
     {
@@ -427,7 +415,7 @@ export function createInitialSeedData(
     {
       id: "acc-4000",
       code: "4000",
-      name: "Design Services Income",
+      name: "Services Income",
       type: "Income",
       detailType: "Service/Fee Income",
       normalBalance: "credit",
@@ -436,7 +424,7 @@ export function createInitialSeedData(
     {
       id: "acc-4010",
       code: "4010",
-      name: "Landscaping & Installation Income",
+      name: "Sales of Product Income",
       type: "Income",
       detailType: "Service/Fee Income",
       normalBalance: "credit",
@@ -445,7 +433,7 @@ export function createInitialSeedData(
     {
       id: "acc-4020",
       code: "4020",
-      name: "Pest Control & Maintenance Income",
+      name: "Consulting & Retainer Income",
       type: "Income",
       detailType: "Service/Fee Income",
       normalBalance: "credit",
@@ -455,7 +443,7 @@ export function createInitialSeedData(
     {
       id: "acc-5010",
       code: "5010",
-      name: "Job Materials (Plants, Soil & Sprinklers)",
+      name: "Supplies & Materials - COGS",
       type: "Cost of Goods Sold",
       detailType: "Supplies & Materials - COGS",
       normalBalance: "debit",
@@ -483,7 +471,7 @@ export function createInitialSeedData(
     {
       id: "acc-6020",
       code: "6020",
-      name: "Automobile & Truck Fuel",
+      name: "Automobile & Fuel Expense",
       type: "Expenses",
       detailType: "Auto",
       normalBalance: "debit",
@@ -537,7 +525,7 @@ export function createInitialSeedData(
     {
       id: "acc-6080",
       code: "6080",
-      name: "Yard & Office Rent",
+      name: "Rent & Lease",
       type: "Expenses",
       detailType: "Rent or Lease of Buildings",
       normalBalance: "debit",
@@ -580,958 +568,18 @@ export function createInitialSeedData(
       isActive: true,
     },
   ];
-
-  const customers: QboCustomer[] = [
-    {
-      id: "cust-1",
-      name: "Amy's Bird Sanctuary",
-      company: "Amy's Bird Sanctuary",
-      email: "amy@birdsanctuary.org",
-      phone: "(650) 555-0192",
-    },
-    {
-      id: "cust-2",
-      name: "Freeman Sporting Goods",
-      company: "Freeman Sporting Goods",
-      email: "ap@freemansporting.com",
-      phone: "(415) 555-0148",
-    },
-    {
-      id: "cust-3",
-      name: "Bill's Windsurf Shop",
-      company: "Bill's Windsurf Shop",
-      email: "bill@windsurfshop.com",
-      phone: "(650) 555-0114",
-    },
-    {
-      id: "cust-4",
-      name: "Geeta Kalapatapu",
-      company: "Kalapatapu Residence",
-      email: "geeta@kalapatapu.net",
-      phone: "(408) 555-0183",
-    },
-    {
-      id: "cust-5",
-      name: "Jeff's Jalopies",
-      company: "Jeff's Jalopies Auto",
-      email: "jeff@jeffsjalopies.com",
-      phone: "(650) 555-0167",
-    },
-  ];
-
-  const vendors: QboVendor[] = [
-    {
-      id: "vend-1",
-      name: "Tania's Nursery",
-      email: "billing@taniasnursery.com",
-      phone: "(650) 555-0201",
-      defaultExpenseAccountId: "acc-5010",
-    },
-    {
-      id: "vend-2",
-      name: "Hicks Hardware",
-      email: "accounts@hickshardware.com",
-      phone: "(650) 555-0244",
-      defaultExpenseAccountId: "acc-5010",
-    },
-    {
-      id: "vend-3",
-      name: "Chin's Gas and Oil",
-      email: "fleet@chinsgas.com",
-      phone: "(415) 555-0288",
-      defaultExpenseAccountId: "acc-6020",
-    },
-    {
-      id: "vend-4",
-      name: "PG&E",
-      email: "support@pge.com",
-      phone: "(800) 743-5000",
-      defaultExpenseAccountId: "acc-6100",
-    },
-    {
-      id: "vend-5",
-      name: "Brosnahan Insurance Agency",
-      email: "policies@brosnahanins.com",
-      phone: "(415) 555-0299",
-      defaultExpenseAccountId: "acc-6040",
-    },
-    {
-      id: "vend-6",
-      name: "Norton Lumber and Building Materials",
-      email: "sales@nortonlumber.com",
-      phone: "(650) 555-0271",
-      defaultExpenseAccountId: "acc-5010",
-    },
-  ];
-
-  const productsAndServices: QboProductService[] = [
-    {
-      id: "prod-1",
-      name: "Landscape Architecture Design",
-      sku: "DES-100",
-      type: "Service",
-      description: "Custom CAD site plan, native plant blueprint & irrigation layout",
-      rateCents: 12500,
-      incomeAccountId: "acc-4000",
-      incomeAccountName: "Design Services Income",
-    },
-    {
-      id: "prod-2",
-      name: "Pond & Irrigation Installation",
-      sku: "LND-200",
-      type: "Service",
-      description: "Full water feature excavation, liner, pump & multi-zone drip irrigation",
-      rateCents: 360000,
-      incomeAccountId: "acc-4010",
-      incomeAccountName: "Landscaping & Installation Income",
-    },
-    {
-      id: "prod-3",
-      name: "Commercial Turf & Sprinklers",
-      sku: "LND-210",
-      type: "Service",
-      description: "Commercial storefront sod installation & smart Wi-Fi controller",
-      rateCents: 342000,
-      incomeAccountId: "acc-4010",
-      incomeAccountName: "Landscaping & Installation Income",
-    },
-    {
-      id: "prod-4",
-      name: "Coastal Grounds & Pest Control",
-      sku: "MNT-300",
-      type: "Service",
-      description: "Monthly palm pruning, salt-tolerant bed care & organic pest treatment",
-      rateCents: 168000,
-      incomeAccountId: "acc-4020",
-      incomeAccountName: "Pest Control & Maintenance Income",
-    },
-    {
-      id: "prod-5",
-      name: "Pop-Up Sprinkler Heads & Brass Nozzles",
-      sku: "MAT-401",
-      type: "Non-Inventory",
-      description: "Commercial grade 4-inch rotary sprinkler heads",
-      rateCents: 4500,
-      incomeAccountId: "acc-4010",
-      incomeAccountName: "Landscaping & Installation Income",
-    },
-    {
-      id: "prod-6",
-      name: "Drought-Tolerant Patio Redesign",
-      sku: "DES-150",
-      type: "Service",
-      description: "Flagstone walkway, decomposed granite & succulent garden",
-      rateCents: 245000,
-      incomeAccountId: "acc-4010",
-      incomeAccountName: "Landscaping & Installation Income",
-    },
-  ];
-
-  const estimates: QboEstimate[] = [
-    {
-      id: "est-2001",
-      estimateNumber: "EST-2001",
-      customerId: "cust-4",
-      customerName: "Geeta Kalapatapu",
-      date: "2026-10-14",
-      expirationDate: "2026-11-14",
-      status: "Accepted",
-      totalCents: 245000,
-      lines: [
-        {
-          serviceName: "Drought-Tolerant Patio Redesign",
-          description: "Flagstone walkway, decomposed granite & succulent garden",
-          quantity: 1,
-          rateCents: 245000,
-          amountCents: 245000,
-          incomeAccountId: "acc-4010",
-        },
-      ],
-    },
-    {
-      id: "est-2002",
-      estimateNumber: "EST-2002",
-      customerId: "cust-5",
-      customerName: "Jeff's Jalopies",
-      date: "2026-10-19",
-      expirationDate: "2026-11-19",
-      status: "Pending",
-      totalCents: 189000,
-      lines: [
-        {
-          serviceName: "Commercial Lot Perimeter Landscaping",
-          description: "Showroom frontage planters & automatic drip system",
-          quantity: 1,
-          rateCents: 189000,
-          amountCents: 189000,
-          incomeAccountId: "acc-4010",
-        },
-      ],
-    },
-  ];
-
-  const rules: QboCategorizationRule[] = [
-    {
-      id: "rule-1",
-      name: "Nursery & Hardware Materials",
-      containsText: "NURSERY",
-      direction: "out",
-      targetAccountId: "acc-5010",
-      payeeName: "Tania's Nursery",
-    },
-    {
-      id: "rule-2",
-      name: "Home Depot / Hardware Supplies",
-      containsText: "HOME DEPOT",
-      direction: "out",
-      targetAccountId: "acc-5010",
-      payeeName: "Home Depot",
-    },
-    {
-      id: "rule-3",
-      name: "Fleet Fuel & Gas",
-      containsText: "GAS",
-      direction: "out",
-      targetAccountId: "acc-6020",
-      payeeName: "Chin's Gas and Oil",
-    },
-    {
-      id: "rule-4",
-      name: "PG&E Utilities",
-      containsText: "PG&E",
-      direction: "out",
-      targetAccountId: "acc-6100",
-      payeeName: "PG&E",
-    },
-    {
-      id: "rule-5",
-      name: "Intuit / Software Subscriptions",
-      containsText: "INTUIT",
-      direction: "out",
-      targetAccountId: "acc-6090",
-      payeeName: "Intuit",
-    },
-    {
-      id: "rule-6",
-      name: "Stripe Customer Deposits",
-      containsText: "STRIPE",
-      direction: "in",
-      targetAccountId: "acc-4010",
-      payeeName: "Stripe Payout",
-    },
-    {
-      id: "rule-7",
-      name: "Gusto Payroll Runs",
-      containsText: "GUSTO",
-      direction: "out",
-      targetAccountId: "acc-6070",
-      payeeName: "Gusto Payroll",
-    },
-  ];
-
-  const journalEntries: QboJournalEntry[] = [
-    // JE-1001: Opening Balance & Capitalization
-    {
-      id: "je-1001",
-      entryNumber: "JE-1001",
-      date: "2026-09-01",
-      memo: "Initial capitalization, fleet truck & savings funding",
-      sourceType: "opening_balance",
-      reconciled: true,
-      createdAt: "2026-09-01T09:00:00Z",
-      lines: [
-        {
-          id: "jl-1",
-          accountId: "acc-1000",
-          accountCode: "1000",
-          accountName: "Business Checking (Chase ••4021)",
-          description: "Opening checking deposit",
-          debitCents: 2500000,
-          creditCents: 0,
-        },
-        {
-          id: "jl-2",
-          accountId: "acc-1010",
-          accountCode: "1010",
-          accountName: "Business Savings (Chase ••8810)",
-          description: "Opening savings reserve",
-          debitCents: 1500000,
-          creditCents: 0,
-        },
-        {
-          id: "jl-3",
-          accountId: "acc-1500",
-          accountCode: "1500",
-          accountName: "Trucks & Landscaping Equipment",
-          description: "Ford F-250 Crew Truck & Commercial Mowers",
-          debitCents: 3200000,
-          creditCents: 0,
-        },
-        {
-          id: "jl-4",
-          accountId: "acc-2500",
-          accountCode: "2500",
-          accountName: "Equipment Loan Payable",
-          description: "Equipment financing note",
-          debitCents: 0,
-          creditCents: 1200000,
-        },
-        {
-          id: "jl-5",
-          accountId: "acc-3100",
-          accountCode: "3100",
-          accountName: "Owner's Equity",
-          description: "Craig's initial owner investment",
-          debitCents: 0,
-          creditCents: 6000000,
-        },
-      ],
-    },
-    // JE-1002: Invoice #1001 to Amy's Bird Sanctuary ($4,850.00) - Paid
-    {
-      id: "je-1002",
-      entryNumber: "JE-1002",
-      date: "2026-10-02",
-      memo: "Invoice #1001 — Amy's Bird Sanctuary (Sanctuary Pond & Native Garden)",
-      sourceType: "invoice",
-      sourceId: "inv-1001",
-      createdAt: "2026-10-02T10:30:00Z",
-      lines: [
-        {
-          id: "jl-6",
-          accountId: "acc-1100",
-          accountCode: "1100",
-          accountName: "Accounts Receivable (A/R)",
-          description: "Invoice #1001",
-          debitCents: 485000,
-          creditCents: 0,
-          entityName: "Amy's Bird Sanctuary",
-        },
-        {
-          id: "jl-7",
-          accountId: "acc-4000",
-          accountCode: "4000",
-          accountName: "Design Services Income",
-          description: "Custom landscape architecture plan",
-          debitCents: 0,
-          creditCents: 125000,
-          entityName: "Amy's Bird Sanctuary",
-        },
-        {
-          id: "jl-8",
-          accountId: "acc-4010",
-          accountCode: "4010",
-          accountName: "Landscaping & Installation Income",
-          description: "Pond installation & irrigation",
-          debitCents: 0,
-          creditCents: 360000,
-          entityName: "Amy's Bird Sanctuary",
-        },
-      ],
-    },
-    // JE-1003: Payment for Invoice #1001 ($4,850.00)
-    {
-      id: "je-1003",
-      entryNumber: "JE-1003",
-      date: "2026-10-05",
-      memo: "Payment received for Invoice #1001 — Amy's Bird Sanctuary",
-      sourceType: "invoice_payment",
-      sourceId: "inv-1001",
-      reconciled: true,
-      createdAt: "2026-10-05T14:15:00Z",
-      lines: [
-        {
-          id: "jl-9",
-          accountId: "acc-1000",
-          accountCode: "1000",
-          accountName: "Business Checking (Chase ••4021)",
-          description: "ACH Deposit — Amy's Bird Sanctuary",
-          debitCents: 485000,
-          creditCents: 0,
-          entityName: "Amy's Bird Sanctuary",
-        },
-        {
-          id: "jl-10",
-          accountId: "acc-1100",
-          accountCode: "1100",
-          accountName: "Accounts Receivable (A/R)",
-          description: "Clear Invoice #1001",
-          debitCents: 0,
-          creditCents: 485000,
-          entityName: "Amy's Bird Sanctuary",
-        },
-      ],
-    },
-    // JE-1004: Invoice #1002 to Freeman Sporting Goods ($3,420.00) - Open
-    {
-      id: "je-1004",
-      entryNumber: "JE-1004",
-      date: "2026-10-10",
-      memo: "Invoice #1002 — Freeman Sporting Goods (Commercial Lawn & Sprinkler Upgrade)",
-      sourceType: "invoice",
-      sourceId: "inv-1002",
-      createdAt: "2026-10-10T11:00:00Z",
-      lines: [
-        {
-          id: "jl-11",
-          accountId: "acc-1100",
-          accountCode: "1100",
-          accountName: "Accounts Receivable (A/R)",
-          description: "Invoice #1002",
-          debitCents: 342000,
-          creditCents: 0,
-          entityName: "Freeman Sporting Goods",
-        },
-        {
-          id: "jl-12",
-          accountId: "acc-4010",
-          accountCode: "4010",
-          accountName: "Landscaping & Installation Income",
-          description: "Commercial turf & smart sprinkler controllers",
-          debitCents: 0,
-          creditCents: 342000,
-          entityName: "Freeman Sporting Goods",
-        },
-      ],
-    },
-    // JE-1005: Invoice #1003 to Bill's Windsurf Shop ($1,680.00) - Overdue
-    {
-      id: "je-1005",
-      entryNumber: "JE-1005",
-      date: "2026-09-18",
-      memo: "Invoice #1003 — Bill's Windsurf Shop (Monthly Coastal Maintenance)",
-      sourceType: "invoice",
-      sourceId: "inv-1003",
-      createdAt: "2026-09-18T16:00:00Z",
-      lines: [
-        {
-          id: "jl-13",
-          accountId: "acc-1100",
-          accountCode: "1100",
-          accountName: "Accounts Receivable (A/R)",
-          description: "Invoice #1003",
-          debitCents: 168000,
-          creditCents: 0,
-          entityName: "Bill's Windsurf Shop",
-        },
-        {
-          id: "jl-14",
-          accountId: "acc-4020",
-          accountCode: "4020",
-          accountName: "Pest Control & Maintenance Income",
-          description: "Boardwalk palms & pest control",
-          debitCents: 0,
-          creditCents: 168000,
-          entityName: "Bill's Windsurf Shop",
-        },
-      ],
-    },
-    // JE-1006: Expense - Yard Rent ($1,800.00) paid from Checking
-    {
-      id: "je-1006",
-      entryNumber: "JE-1006",
-      date: "2026-10-01",
-      memo: "October Equipment Yard & Office Lease",
-      sourceType: "expense",
-      sourceId: "exp-1",
-      reconciled: true,
-      createdAt: "2026-10-01T08:00:00Z",
-      lines: [
-        {
-          id: "jl-15",
-          accountId: "acc-6080",
-          accountCode: "6080",
-          accountName: "Yard & Office Rent",
-          description: "Monthly yard lease",
-          debitCents: 180000,
-          creditCents: 0,
-          entityName: "Bay Area Industrial Properties",
-        },
-        {
-          id: "jl-16",
-          accountId: "acc-1000",
-          accountCode: "1000",
-          accountName: "Business Checking (Chase ••4021)",
-          description: "ACH Rent Payment",
-          debitCents: 0,
-          creditCents: 180000,
-          entityName: "Bay Area Industrial Properties",
-        },
-      ],
-    },
-    // JE-1007: Expense - Tania's Nursery ($945.00) paid on Corporate Amex
-    {
-      id: "je-1007",
-      entryNumber: "JE-1007",
-      date: "2026-10-06",
-      memo: "Japanese Maple trees, sod rolls & irrigation fittings",
-      sourceType: "expense",
-      sourceId: "exp-2",
-      createdAt: "2026-10-06T12:20:00Z",
-      lines: [
-        {
-          id: "jl-17",
-          accountId: "acc-5010",
-          accountCode: "5010",
-          accountName: "Job Materials (Plants, Soil & Sprinklers)",
-          description: "Nursery stock for Amy's Sanctuary job",
-          debitCents: 94500,
-          creditCents: 0,
-          entityName: "Tania's Nursery",
-        },
-        {
-          id: "jl-18",
-          accountId: "acc-2100",
-          accountCode: "2100",
-          accountName: "Corporate Platinum Card (Amex ••1004)",
-          description: "Amex charge — Tania's Nursery",
-          debitCents: 0,
-          creditCents: 94500,
-          entityName: "Tania's Nursery",
-        },
-      ],
-    },
-    // JE-1008: Bill from Norton Lumber ($1,120.00) - Open Bill in A/P
-    {
-      id: "je-1008",
-      entryNumber: "JE-1008",
-      date: "2026-10-12",
-      memo: "Bill #NL-409 — Redwood pergola timbers & concrete mix",
-      sourceType: "bill",
-      sourceId: "exp-3",
-      createdAt: "2026-10-12T15:00:00Z",
-      lines: [
-        {
-          id: "jl-19",
-          accountId: "acc-5010",
-          accountCode: "5010",
-          accountName: "Job Materials (Plants, Soil & Sprinklers)",
-          description: "Redwood timbers for Freeman job",
-          debitCents: 112000,
-          creditCents: 0,
-          entityName: "Norton Lumber and Building Materials",
-        },
-        {
-          id: "jl-20",
-          accountId: "acc-2000",
-          accountCode: "2000",
-          accountName: "Accounts Payable (A/P)",
-          description: "Open Vendor Bill #NL-409",
-          debitCents: 0,
-          creditCents: 112000,
-          entityName: "Norton Lumber and Building Materials",
-        },
-      ],
-    },
-    // JE-1009: Expense - Brosnahan Insurance ($547.00) on Corporate Amex
-    {
-      id: "je-1009",
-      entryNumber: "JE-1009",
-      date: "2026-10-14",
-      memo: "Commercial general liability & fleet policy",
-      sourceType: "expense",
-      sourceId: "exp-4",
-      createdAt: "2026-10-14T09:45:00Z",
-      lines: [
-        {
-          id: "jl-21",
-          accountId: "acc-6040",
-          accountCode: "6040",
-          accountName: "General Liability Insurance",
-          description: "Quarterly liability coverage",
-          debitCents: 54700,
-          creditCents: 0,
-          entityName: "Brosnahan Insurance Agency",
-        },
-        {
-          id: "jl-22",
-          accountId: "acc-2100",
-          accountCode: "2100",
-          accountName: "Corporate Platinum Card (Amex ••1004)",
-          description: "Amex charge — Brosnahan Insurance",
-          debitCents: 0,
-          creditCents: 54700,
-          entityName: "Brosnahan Insurance Agency",
-        },
-      ],
-    },
-  ];
-
-  const invoices: QboInvoice[] = [
-    {
-      id: "inv-1001",
-      invoiceNumber: "1001",
-      customerId: "cust-1",
-      customerName: "Amy's Bird Sanctuary",
-      date: "2026-10-02",
-      dueDate: "2026-11-01",
-      status: "Paid",
-      totalCents: 485000,
-      balanceDueCents: 0,
-      journalEntryId: "je-1002",
-      paymentJournalEntryId: "je-1003",
-      lines: [
-        {
-          id: "il-1",
-          serviceName: "Landscape Architecture Design",
-          description: "Sanctuary native habitat & pond blueprint",
-          quantity: 10,
-          rateCents: 12500,
-          amountCents: 125000,
-          incomeAccountId: "acc-4000",
-        },
-        {
-          id: "il-2",
-          serviceName: "Pond & Irrigation Installation",
-          description: "Koi pond liner, pump, stone edging & drip zones",
-          quantity: 1,
-          rateCents: 360000,
-          amountCents: 360000,
-          incomeAccountId: "acc-4010",
-        },
-      ],
-    },
-    {
-      id: "inv-1002",
-      invoiceNumber: "1002",
-      customerId: "cust-2",
-      customerName: "Freeman Sporting Goods",
-      date: "2026-10-10",
-      dueDate: "2026-11-09",
-      status: "Open",
-      totalCents: 342000,
-      balanceDueCents: 342000,
-      journalEntryId: "je-1004",
-      lines: [
-        {
-          id: "il-3",
-          serviceName: "Commercial Turf & Sprinklers",
-          description: "Storefront lawn re-sodding and 8-zone smart controller",
-          quantity: 1,
-          rateCents: 342000,
-          amountCents: 342000,
-          incomeAccountId: "acc-4010",
-        },
-      ],
-    },
-    {
-      id: "inv-1003",
-      invoiceNumber: "1003",
-      customerId: "cust-3",
-      customerName: "Bill's Windsurf Shop",
-      date: "2026-09-18",
-      dueDate: "2026-10-18",
-      status: "Overdue",
-      totalCents: 168000,
-      balanceDueCents: 168000,
-      journalEntryId: "je-1005",
-      lines: [
-        {
-          id: "il-4",
-          serviceName: "Coastal Grounds & Pest Control",
-          description: "Palm pruning, salt-tolerant beds & organic pest treatment",
-          quantity: 1,
-          rateCents: 168000,
-          amountCents: 168000,
-          incomeAccountId: "acc-4020",
-        },
-      ],
-    },
-  ];
-
-  const expenses: QboExpense[] = [
-    {
-      id: "exp-1",
-      refNumber: "ACH-1001",
-      type: "Expense",
-      vendorId: "vend-4",
-      vendorName: "Bay Area Industrial Properties",
-      date: "2026-10-01",
-      paymentAccountId: "acc-1000",
-      categoryAccountId: "acc-6080",
-      categoryAccountName: "Yard & Office Rent",
-      description: "October Equipment Yard & Office Lease",
-      amountCents: 180000,
-      status: "Paid",
-      journalEntryId: "je-1006",
-    },
-    {
-      id: "exp-2",
-      refNumber: "AMEX-882",
-      type: "Expense",
-      vendorId: "vend-1",
-      vendorName: "Tania's Nursery",
-      date: "2026-10-06",
-      paymentAccountId: "acc-2100",
-      categoryAccountId: "acc-5010",
-      categoryAccountName: "Job Materials (Plants, Soil & Sprinklers)",
-      description: "Japanese Maple trees, sod rolls & irrigation fittings",
-      amountCents: 94500,
-      status: "Paid",
-      journalEntryId: "je-1007",
-    },
-    {
-      id: "exp-3",
-      refNumber: "NL-409",
-      type: "Bill",
-      vendorId: "vend-6",
-      vendorName: "Norton Lumber and Building Materials",
-      date: "2026-10-12",
-      dueDate: "2026-11-11",
-      paymentAccountId: "acc-2000",
-      categoryAccountId: "acc-5010",
-      categoryAccountName: "Job Materials (Plants, Soil & Sprinklers)",
-      description: "Redwood pergola timbers & concrete mix",
-      amountCents: 112000,
-      status: "Open",
-      journalEntryId: "je-1008",
-    },
-    {
-      id: "exp-4",
-      refNumber: "AMEX-904",
-      type: "Expense",
-      vendorId: "vend-5",
-      vendorName: "Brosnahan Insurance Agency",
-      date: "2026-10-14",
-      paymentAccountId: "acc-2100",
-      categoryAccountId: "acc-6040",
-      categoryAccountName: "General Liability Insurance",
-      description: "Commercial general liability & fleet policy",
-      amountCents: 54700,
-      status: "Paid",
-      journalEntryId: "je-1009",
-    },
-  ];
-
-  // Uncategorized ("For Review") + Categorized Bank Feed Items
-  const bankTransactions: QboBankTransaction[] = [
-    {
-      id: "btx-1",
-      bankAccountId: "acc-1000",
-      date: "2026-10-15",
-      description: "HICKS HARDWARE #102 IRRIGATION PIPE",
-      payee: "Hicks Hardware",
-      amountCents: -31250,
-      status: "for_review",
-      suggestedAccountId: "acc-5010",
-      matchedRuleName: "Hardware Supplies",
-      aiConfidence: 97,
-      aiReasoning:
-        "Matched vendor 'Hicks Hardware' + keyword 'IRRIGATION PIPE' against 4 prior categorizations to 5010 Job Materials.",
-      fingerprint: makeFingerprint(
-        "acc-1000",
-        "2026-10-15",
-        "HICKS HARDWARE #102 IRRIGATION PIPE",
-        -31250
-      ),
-    },
-    {
-      id: "btx-2",
-      bankAccountId: "acc-1000",
-      date: "2026-10-16",
-      description: "CHIN'S GAS AND OIL FLEET FUEL",
-      payee: "Chin's Gas and Oil",
-      amountCents: -14260,
-      status: "for_review",
-      suggestedAccountId: "acc-6020",
-      matchedRuleName: "Fleet Fuel & Gas",
-      aiConfidence: 99,
-      aiReasoning:
-        "Recurring fuel merchant 'Chin's Gas and Oil' matches rule 'Fleet Fuel & Gas' -> 6020 Automobile & Truck Fuel.",
-      fingerprint: makeFingerprint(
-        "acc-1000",
-        "2026-10-16",
-        "CHIN'S GAS AND OIL FLEET FUEL",
-        -14260
-      ),
-    },
-    {
-      id: "btx-3",
-      bankAccountId: "acc-1000",
-      date: "2026-10-17",
-      description: "STRIPE PAYOUT - GEETA KALAPATAPU PATIO DESIGN",
-      payee: "Geeta Kalapatapu",
-      amountCents: 125000,
-      status: "for_review",
-      suggestedAccountId: "acc-4010",
-      matchedRuleName: "Stripe Customer Deposits",
-      aiConfidence: 94,
-      aiReasoning:
-        "Positive ACH deposit ($1,250.00) with 'PATIO DESIGN' memo aligns with 4010 Design & Consulting Income.",
-      fingerprint: makeFingerprint(
-        "acc-1000",
-        "2026-10-17",
-        "STRIPE PAYOUT - GEETA KALAPATAPU PATIO DESIGN",
-        125000
-      ),
-    },
-    {
-      id: "btx-4",
-      bankAccountId: "acc-1000",
-      date: "2026-10-18",
-      description: "PG&E COMMERCIAL ELECTRIC & WATER PUMP",
-      payee: "PG&E",
-      amountCents: -22500,
-      status: "for_review",
-      suggestedAccountId: "acc-6100",
-      matchedRuleName: "PG&E Utilities",
-      aiConfidence: 98,
-      aiReasoning:
-        "Utility provider 'PG&E' consistently categorized to 6100 Utilities (Gas, Water & Electric).",
-      fingerprint: makeFingerprint(
-        "acc-1000",
-        "2026-10-18",
-        "PG&E COMMERCIAL ELECTRIC & WATER PUMP",
-        -22500
-      ),
-    },
-    {
-      id: "btx-5",
-      bankAccountId: "acc-2100",
-      date: "2026-10-19",
-      description: "INTUIT QUICKBOOKS ONLINE PLUS",
-      payee: "Intuit",
-      amountCents: -9000,
-      status: "for_review",
-      suggestedAccountId: "acc-6090",
-      matchedRuleName: "Intuit / Software Subscriptions",
-      aiConfidence: 99,
-      aiReasoning:
-        "SaaS subscription charge on Amex ••1004 matches 6090 Software & Cloud Subscriptions.",
-      fingerprint: makeFingerprint(
-        "acc-2100",
-        "2026-10-19",
-        "INTUIT QUICKBOOKS ONLINE PLUS",
-        -9000
-      ),
-    },
-    {
-      id: "btx-6",
-      bankAccountId: "acc-1000",
-      date: "2026-10-05",
-      description: "ACH DEPOSIT AMY'S BIRD SANCTUARY INV 1001",
-      payee: "Amy's Bird Sanctuary",
-      amountCents: 485000,
-      status: "categorized",
-      suggestedAccountId: "acc-1100",
-      postedJournalEntryId: "je-1003",
-      reconciled: true,
-      fingerprint: makeFingerprint(
-        "acc-1000",
-        "2026-10-05",
-        "ACH DEPOSIT AMY'S BIRD SANCTUARY INV 1001",
-        485000
-      ),
-    },
-    {
-      id: "btx-7",
-      bankAccountId: "acc-1000",
-      date: "2026-10-01",
-      description: "BAY AREA INDUSTRIAL PROPERTIES RENT",
-      payee: "Bay Area Industrial Properties",
-      amountCents: -180000,
-      status: "categorized",
-      suggestedAccountId: "acc-6080",
-      postedJournalEntryId: "je-1006",
-      reconciled: true,
-      fingerprint: makeFingerprint(
-        "acc-1000",
-        "2026-10-01",
-        "BAY AREA INDUSTRIAL PROPERTIES RENT",
-        -180000
-      ),
-    },
-  ];
-
-  const reconciliations: QboReconciliationRecord[] = [
-    {
-      id: "rec-1",
-      bankAccountId: "acc-1000",
-      bankAccountName: "Business Checking (Chase ••4021)",
-      statementDate: "2026-09-30",
-      endingBalanceCents: 2500000,
-      clearedCount: 1,
-      reconciledAt: "2026-10-02T10:00:00Z",
-    },
-  ];
-
-  const auditLogs: QboAuditLogItem[] = [
-    {
-      id: "aud-1",
-      timestamp: "2026-10-14T09:45:00Z",
-      user: "Craig Carlson (Owner)",
-      action: "Expense Recorded",
-      details: "JE-1009 · Brosnahan Insurance Agency (General Liability)",
-      amountCents: 54700,
-    },
-    {
-      id: "aud-2",
-      timestamp: "2026-10-12T15:00:00Z",
-      user: "Craig Carlson (Owner)",
-      action: "Bill Entered",
-      details: "JE-1008 · Norton Lumber and Building Materials (#NL-409)",
-      amountCents: 112000,
-    },
-    {
-      id: "aud-3",
-      timestamp: "2026-10-10T11:00:00Z",
-      user: "Craig Carlson (Owner)",
-      action: "Invoice Created",
-      details: "JE-1004 · Invoice #1002 to Freeman Sporting Goods",
-      amountCents: 342000,
-    },
-    {
-      id: "aud-4",
-      timestamp: "2026-10-05T14:15:00Z",
-      user: "Craig Carlson (Owner)",
-      action: "Invoice Payment Received",
-      details: "JE-1003 · Payment for Invoice #1001 (Amy's Bird Sanctuary)",
-      amountCents: 485000,
-    },
-  ];
-
-  const teamMembers: QboTeamMember[] = [
-    {
-      id: ownerInfo?.id || "tm-1",
-      name: ownerInfo?.name?.trim() || "Company Owner",
-      email: ownerInfo?.email?.trim().toLowerCase() || "owner@company.local",
-      role: "owner",
-      status: "Active",
-    },
-  ];
-
-  return {
-    companyName:
-      customCompanyName?.trim() || "Craig's Design and Landscaping Services",
-    lockedThroughDate: "2026-08-31",
-    activeRole: "owner",
-    salesTaxRatePercent: 8.25,
-    teamMembers,
-    accounts,
-    journalEntries,
-    bankTransactions,
-    rules,
-    customers,
-    vendors,
-    productsAndServices,
-    estimates,
-    invoices,
-    expenses,
-    reconciliations,
-    auditLogs,
-  };
 }
 
 export function createFreshCompanyData(
-  companyName: string,
+  companyName = "New Business LLC",
   ownerInfo?: InitialOwnerInfo
 ): QboStoreData {
-  const base = createInitialSeedData(companyName, ownerInfo);
+  const cleanName = companyName.trim() || "New Business LLC";
   const ownerName = ownerInfo?.name?.trim() || "Company Owner";
   const ownerEmail =
     ownerInfo?.email?.trim().toLowerCase() || "owner@company.local";
   return {
-    companyName: companyName.trim() || "New Business LLC",
+    companyName: cleanName,
     lockedThroughDate: null,
     activeRole: "owner",
     salesTaxRatePercent: 8.25,
@@ -1544,16 +592,13 @@ export function createFreshCompanyData(
         status: "Active",
       },
     ],
-    accounts: base.accounts.map((a) => ({
-      ...a,
-      bankBalanceCents: a.bankBalanceCents !== undefined ? 0 : undefined,
-    })),
+    accounts: createStandardChartOfAccounts(),
     journalEntries: [],
     bankTransactions: [],
-    rules: base.rules,
+    rules: [],
     customers: [],
     vendors: [],
-    productsAndServices: base.productsAndServices,
+    productsAndServices: [],
     estimates: [],
     invoices: [],
     expenses: [],
@@ -1564,7 +609,7 @@ export function createFreshCompanyData(
         timestamp: new Date().toISOString(),
         user: `${ownerName} (OWNER)`,
         action: "Company Created",
-        details: `Initialized 31 Chart of Accounts for ${companyName.trim()}`,
+        details: `Initialized 31 Chart of Accounts for ${cleanName}`,
       },
     ],
   };
@@ -1578,7 +623,7 @@ const globalStore = globalThis as unknown as GlobalQboStore;
 
 export function getRawStore(): QboStoreData {
   if (!globalStore.__qboStoreData) {
-    globalStore.__qboStoreData = createInitialSeedData();
+    globalStore.__qboStoreData = createFreshCompanyData();
   }
   return globalStore.__qboStoreData;
 }
@@ -1603,15 +648,15 @@ export function resetQboStore(ownerInfo?: InitialOwnerInfo): QboStoreData {
           }
         : undefined;
     })();
-  globalStore.__qboStoreData = createInitialSeedData(
-    current?.companyName,
+  globalStore.__qboStoreData = createFreshCompanyData(
+    current?.companyName || "New Business LLC",
     fallbackOwner
   );
   return globalStore.__qboStoreData;
 }
 
 export function wipeAllCompanyTransactions(): QboStoreData {
-  assertIsOwner("wipe all company sample data");
+  assertIsOwner("reset all company transactions");
   assertCanWrite();
   const store = getRawStore();
   store.journalEntries = [];
@@ -1622,18 +667,16 @@ export function wipeAllCompanyTransactions(): QboStoreData {
   store.reconciliations = [];
   store.customers = [];
   store.vendors = [];
+  store.productsAndServices = [];
+  store.rules = [];
   store.lockedThroughDate = null;
   for (const acc of store.accounts) {
     if (acc.bankBalanceCents !== undefined) {
       acc.bankBalanceCents = 0;
     }
   }
-  // Preserve real team members (filtering out any legacy mock or super-admin emails)
   const realMembers = (store.teamMembers || []).filter(
-    (m) =>
-      m.email !== "enterandpost02@gmail.com" &&
-      m.name !== "Sarah Jenkins" &&
-      m.name !== "Arthur Andersen, CPA"
+    (m) => m.email !== "enterandpost02@gmail.com"
   );
   if (realMembers.length > 0) {
     store.teamMembers = realMembers;
@@ -1650,8 +693,8 @@ export function wipeAllCompanyTransactions(): QboStoreData {
   }
   store.activeRole = "owner";
   appendAuditLog(
-    "All Transactions Wiped",
-    "Cleared all sample invoices, bills, journal entries, and bank transactions. Books reset to clean $0.00 balances for live production use."
+    "Ledger Reset",
+    "Cleared all transactions, customers, vendors, and bank feed items. Books reset to $0.00 balances."
   );
   return store;
 }
@@ -1721,7 +764,6 @@ export interface ComputedQboState extends QboStoreData {
   activeOrganizationId?: string;
   organizations?: Array<{ id: string; name: string; slug: string }>;
   accountsWithBalances: ComputedAccount[];
-  sampleCsvText: string;
   reports: {
     profitAndLoss: {
       incomeLines: Array<{ id: string; code: string; name: string; amountCents: number }>;
@@ -2820,7 +1862,6 @@ export function getComputedQboState(): ComputedQboState {
   return {
     ...store,
     accountsWithBalances,
-    sampleCsvText: SAMPLE_BANK_CSV,
     reports: {
       profitAndLoss: {
         incomeLines,
@@ -3247,7 +2288,7 @@ export function importBankCsvRows(input: {
     );
 
     store.bankTransactions.unshift({
-      id: `btx-${Date.now()}-${importedCount}`,
+      id: `btx-${Date.now()}-${store.bankTransactions.length + 1}-${importedCount}`,
       bankAccountId: input.bankAccountId,
       date: row.date,
       description: row.description,
@@ -3988,7 +3029,7 @@ export function runAiAutoCategorizer(): { analyzedCount: number } {
       tx.suggestedAccountId = "acc-5010";
       tx.aiConfidence = 95;
       tx.aiReasoning =
-        "AI detected landscaping material keywords (NURSERY/HARDWARE/VALVES) matching prior COGS bills → 5010 Job Materials.";
+        "AI detected material & supply keywords matching COGS categories → 5010 Supplies & Materials - COGS.";
     } else if (
       upper.includes("GAS") ||
       upper.includes("SHELL") ||
@@ -3998,7 +3039,7 @@ export function runAiAutoCategorizer(): { analyzedCount: number } {
       tx.suggestedAccountId = "acc-6020";
       tx.aiConfidence = 96;
       tx.aiReasoning =
-        "AI identified fuel station merchant pattern → 6020 Automobile & Truck Fuel.";
+        "AI identified fuel station merchant pattern → 6020 Automobile & Fuel Expense.";
     } else if (
       upper.includes("STRIPE") ||
       upper.includes("DEPOSIT") ||
@@ -4008,12 +3049,12 @@ export function runAiAutoCategorizer(): { analyzedCount: number } {
       tx.suggestedAccountId = "acc-4000";
       tx.aiConfidence = 91;
       tx.aiReasoning =
-        "AI analyzed positive customer inflow and matched to primary revenue account → 4000 Landscaping Services Income.";
+        "AI analyzed positive customer inflow and matched to primary revenue account → 4000 Services Income.";
     } else {
       tx.suggestedAccountId = tx.suggestedAccountId || "acc-6060";
       tx.aiConfidence = 84;
       tx.aiReasoning =
-        "AI fallback classification for general commercial operating outflow → 6060 Office Supplies & Postage.";
+        "AI fallback classification for general commercial operating outflow → 6060 Office Supplies & Software.";
     }
   }
 

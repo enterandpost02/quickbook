@@ -7,9 +7,7 @@ import {
   ClipboardList,
   CreditCard,
   Download,
-  FileSpreadsheet,
   FileText,
-  History,
   Landmark,
   Lock,
   Mail,
@@ -17,10 +15,8 @@ import {
   Plus,
   Receipt,
   RotateCcw,
-  Scale,
   Search,
   Send,
-  ShieldAlert,
   Sparkles,
   Trash2,
   Unlock,
@@ -3564,12 +3560,12 @@ export function ReconcileView({ state, runAction, isSubmitting }: ViewProps) {
   const [bankAccountId, setBankAccountId] = useState(
     bankAccounts[0]?.id ?? "acc-1000"
   );
-  const [statementDate, setStatementDate] = useState("2026-10-31");
+  const [statementDate] = useState("2026-10-31");
   const currentBank =
     bankAccounts.find((a) => a.id === bankAccountId) ?? bankAccounts[0];
 
   const [statementEndingDollars, setStatementEndingDollars] = useState(
-    ((currentBank?.balanceCents ?? 2805000) / 100).toFixed(2)
+    ((currentBank?.balanceCents ?? 0) / 100).toFixed(2)
   );
   const [lockDateInput, setLockDateInput] = useState(
     state.lockedThroughDate ?? "2026-09-30"
@@ -4564,63 +4560,23 @@ export function AuditLogView({
               ))}
             </div>
 
-            {/* Production Data Management & Cleanup */}
+            {/* Company Data Backup & Export */}
             <div className="rounded-xl border border-slate-200 bg-white p-5 mt-6 shadow-2xs space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
                 <div>
                   <h3 className="text-sm font-bold text-slate-900">
-                    Production Data Management &amp; Clean Books
+                    Company Ledger Backup &amp; Export
                   </h3>
                   <p className="text-xs text-slate-500">
-                    Manage sample test data or start completely fresh with $0.00 balances for live deployment
+                    Download a full single-file archive of all Chart of Accounts, customers, vendors, invoices, bills, journal entries, reconciliations, and audit logs
                   </p>
                 </div>
                 <span className="rounded-full bg-emerald-50 border border-emerald-200 px-3 py-1 text-xs font-bold text-[#2CA01C]">
-                  ✓ Vercel &amp; Cloud Ready
+                  ✓ Production Cloud Ready
                 </span>
               </div>
 
               <div className="flex flex-wrap items-center gap-3 pt-1">
-                <button
-                  onClick={async () => {
-                    if (
-                      window.confirm(
-                        `Wipe all sample data for "${state.companyName}"?\n\nThis will remove all demo invoices, bills, journal entries, and bank transactions. Your Chart of Accounts will be reset to $0.00 balances, ready for live production use.`
-                      )
-                    ) {
-                      await runAction(
-                        "wipe_transactions",
-                        {},
-                        `Wiped all sample transactions for "${state.companyName}". Books are now fresh with $0.00 balances!`
-                      );
-                    }
-                  }}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-rose-300 bg-rose-50 px-4 py-2 text-xs font-bold text-rose-700 hover:bg-rose-100 transition-colors"
-                >
-                  <RotateCcw className="h-3.5 w-3.5 text-rose-600" />
-                  Wipe All Sample Data ($0.00 Fresh Books)
-                </button>
-
-                <button
-                  onClick={async () => {
-                    if (
-                      window.confirm(
-                        `Reset "${state.companyName}" to pre-loaded sample practice data?`
-                      )
-                    ) {
-                      await runAction(
-                        "reset_demo",
-                        {},
-                        "Reset company data to initial sample state"
-                      );
-                    }
-                  }}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
-                >
-                  <RotateCcw className="h-3.5 w-3.5 text-slate-500" />
-                  Load Demo Practice Data
-                </button>
-
                 <button
                   onClick={exportFullCompanyCsv}
                   className="inline-flex items-center gap-1.5 rounded-full bg-[#2CA01C] px-4 py-2 text-xs font-bold text-white hover:bg-[#248217] transition-colors"

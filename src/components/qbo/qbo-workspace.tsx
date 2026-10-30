@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   BookOpenCheck,
   Building2,
@@ -17,12 +18,10 @@ import {
   Menu,
   Plus,
   Receipt,
-  RotateCcw,
   Scale,
   ScrollText,
   Search,
   Settings,
-  Trash2,
   Upload,
   X,
 } from "lucide-react";
@@ -62,6 +61,7 @@ export function QboWorkspace({
   initialState: ComputedQboState;
   currentUser?: CurrentUserSession;
 }) {
+  const router = useRouter();
   const [state, setState] = useState<ComputedQboState>(initialState);
   const [activeTab, setActiveTab] = useState<QboNavTab>("home");
   const [activeModal, setActiveModal] = useState<ActiveModalType>(null);
@@ -72,9 +72,6 @@ export function QboWorkspace({
   const [newCompanyName, setNewCompanyName] = useState("");
   const [newCompanyIndustry, setNewCompanyIndustry] = useState("Professional, Scientific & Technical Services");
   const [newCompanyTaxId, setNewCompanyTaxId] = useState("");
-  const [newCompanyTemplate, setNewCompanyTemplate] = useState<
-    "empty" | "sample"
-  >("empty");
   const [toast, setToast] = useState<{
     type: "success" | "error";
     message: string;
@@ -86,7 +83,8 @@ export function QboWorkspace({
     } catch (e) {
       console.warn("Logout error:", e);
     } finally {
-      window.location.href = "/login";
+      router.replace("/login");
+      router.refresh();
     }
   }
 
@@ -334,53 +332,6 @@ export function QboWorkspace({
             Active: <span className="text-slate-200 font-medium">{state.companyName}</span>
           </p>
         </div>
-
-        {isAuthenticatedOwner && (
-          <>
-            <button
-              onClick={async () => {
-                if (
-                  window.confirm(
-                    `Wipe all sample data for "${state.companyName}"?\n\nThis removes all invoices, bills, journal entries, and bank transactions so you can start with fresh $0.00 books for your real business.`
-                  )
-                ) {
-                  if (isMobile) setIsMobileMenuOpen(false);
-                  await runAction(
-                    "wipe_transactions",
-                    {},
-                    `Wiped all sample transactions for "${state.companyName}". Books are now fresh with $0.00 balances!`
-                  );
-                }
-              }}
-              className="w-full flex items-center justify-center gap-1.5 rounded-lg border border-rose-900/60 bg-rose-950/30 py-1.5 text-xs font-semibold text-rose-300 hover:bg-rose-900/50 hover:text-rose-100 transition-colors"
-              title="Delete all sample transactions and reset to $0.00"
-            >
-              <Trash2 className="h-3 w-3 text-rose-400" />
-              Wipe Sample Data ($0.00)
-            </button>
-
-            <button
-              onClick={async () => {
-                if (
-                  window.confirm(
-                    `Reset "${state.companyName}" to pre-loaded sample practice data?`
-                  )
-                ) {
-                  if (isMobile) setIsMobileMenuOpen(false);
-                  await runAction(
-                    "reset_demo",
-                    {},
-                    "Reset sample company data to initial state"
-                  );
-                }
-              }}
-              className="w-full flex items-center justify-center gap-1.5 rounded-lg border border-slate-700 py-1 text-[11px] text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
-            >
-              <RotateCcw className="h-3 w-3" />
-              Load Demo Practice Data
-            </button>
-          </>
-        )}
 
         <button
           onClick={() => {
@@ -1046,7 +997,6 @@ export function QboWorkspace({
                   "create_organization",
                   {
                     name: createdName,
-                    template: newCompanyTemplate,
                     industry: newCompanyIndustry,
                     taxId: newCompanyTaxId.trim() || undefined,
                   },
@@ -1114,69 +1064,18 @@ export function QboWorkspace({
                 <span className="text-[11px] text-slate-500 font-medium">Fiscal Year: Jan – Dec</span>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">
-                  Initial Books Setup
-                </label>
-                <div className="space-y-2.5">
-                  <label
-                    className={`flex items-start gap-3 rounded-xl border p-3.5 cursor-pointer transition-all ${
-                      newCompanyTemplate === "empty"
-                        ? "border-[#2CA01C] bg-emerald-50/70 shadow-2xs ring-1 ring-[#2CA01C]/30"
-                        : "border-slate-200 hover:bg-slate-50"
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="companyTemplate"
-                      checked={newCompanyTemplate === "empty"}
-                      onChange={() => setNewCompanyTemplate("empty")}
-                      className="mt-1 accent-[#2CA01C]"
-                    />
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-xs text-slate-900">
-                          Fresh Company ($0.00 Balances)
-                        </span>
-                        <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-[#2CA01C]">
-                          Recommended for Live
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">
-                        Starts clean with the 31 standard Pro E Books Chart of Accounts and 0 transactions—ready for your real invoices, bills, and bank imports.
-                      </p>
-                    </div>
-                  </label>
-
-                  <label
-                    className={`flex items-start gap-3 rounded-xl border p-3.5 cursor-pointer transition-all ${
-                      newCompanyTemplate === "sample"
-                        ? "border-[#2CA01C] bg-emerald-50/70 shadow-2xs ring-1 ring-[#2CA01C]/30"
-                        : "border-slate-200 hover:bg-slate-50"
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="companyTemplate"
-                      checked={newCompanyTemplate === "sample"}
-                      onChange={() => setNewCompanyTemplate("sample")}
-                      className="mt-1 accent-[#2CA01C]"
-                    />
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-xs text-slate-900">
-                          Pre-loaded Practice Data
-                        </span>
-                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
-                          Demo &amp; Testing
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">
-                        Pre-populates sample invoices, bills, journal entries, and bank feed rows for exploring features before entering real data.
-                      </p>
-                    </div>
-                  </label>
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-xs text-slate-900">
+                    Clean Production Ledger ($0.00 Balances)
+                  </span>
+                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-[#2CA01C]">
+                    31 GAAP Accounts
+                  </span>
                 </div>
+                <p className="text-[11px] text-slate-600 mt-1 leading-relaxed">
+                  Initializes with the 31 standard Pro E Books Chart of Accounts and 0 transactions—ready for your live invoices, bills, and bank statement imports.
+                </p>
               </div>
 
               <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">

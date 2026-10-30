@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Activity,
   Ban,
@@ -30,6 +31,7 @@ export function GodfatherAdminConsole({
   initialOverview: PlatformAdminOverview;
   adminUser: { id: string; email: string; fullName: string };
 }) {
+  const router = useRouter();
   const [overview, setOverview] =
     useState<PlatformAdminOverview>(initialOverview);
   const [activeTab, setActiveTab] = useState<
@@ -54,9 +56,6 @@ export function GodfatherAdminConsole({
   // New Tenant & Owner Form
   const [tenantName, setTenantName] = useState("");
   const [tenantCurrency, setTenantCurrency] = useState("USD");
-  const [tenantTemplate, setTenantTemplate] = useState<"empty" | "sample">(
-    "empty"
-  );
   const [ownerName, setOwnerName] = useState("");
   const [ownerEmail, setOwnerEmail] = useState("");
   const [ownerPassword, setOwnerPassword] = useState("");
@@ -86,7 +85,8 @@ export function GodfatherAdminConsole({
     } catch {
       // ignore
     } finally {
-      window.location.href = "/login";
+      router.replace("/login");
+      router.refresh();
     }
   }
 
@@ -126,7 +126,8 @@ export function GodfatherAdminConsole({
         return false;
       }
       if (data.redirectTo) {
-        window.location.href = data.redirectTo;
+        router.push(data.redirectTo);
+        router.refresh();
         return true;
       }
       setOverview(data);
@@ -405,7 +406,7 @@ export function GodfatherAdminConsole({
                           </div>
                         ) : (
                           <span className="text-slate-400 italic">
-                            Platform Sandbox (Unassigned)
+                            Unassigned
                           </span>
                         )}
                       </td>
@@ -811,7 +812,6 @@ export function GodfatherAdminConsole({
                   {
                     organizationName: tenantName,
                     baseCurrency: tenantCurrency,
-                    template: tenantTemplate,
                     ownerName,
                     ownerEmail,
                     ownerPassword,
@@ -842,38 +842,21 @@ export function GodfatherAdminConsole({
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">
-                    Base Currency
-                  </label>
-                  <select
-                    value={tenantCurrency}
-                    onChange={(e) => setTenantCurrency(e.target.value)}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white"
-                  >
-                    <option value="USD">USD ($)</option>
-                    <option value="EUR">EUR (€)</option>
-                    <option value="GBP">GBP (£)</option>
-                    <option value="CAD">CAD ($)</option>
-                    <option value="AUD">AUD ($)</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">
-                    Initial Ledger
-                  </label>
-                  <select
-                    value={tenantTemplate}
-                    onChange={(e) =>
-                      setTenantTemplate(e.target.value as "empty" | "sample")
-                    }
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white"
-                  >
-                    <option value="empty">Clean $0.00 Books</option>
-                    <option value="sample">Sample Demo Data</option>
-                  </select>
-                </div>
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Base Currency
+                </label>
+                <select
+                  value={tenantCurrency}
+                  onChange={(e) => setTenantCurrency(e.target.value)}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white"
+                >
+                  <option value="USD">USD ($)</option>
+                  <option value="EUR">EUR (€)</option>
+                  <option value="GBP">GBP (£)</option>
+                  <option value="CAD">CAD ($)</option>
+                  <option value="AUD">AUD ($)</option>
+                </select>
               </div>
 
               <div className="border-t border-slate-200 pt-3">

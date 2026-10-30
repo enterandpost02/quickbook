@@ -58,8 +58,8 @@ export async function loginAction(
   const isSuper = Boolean(user.isSuperAdmin) || isSuperAdminEmail(user.email);
 
   if (isSuper) {
-    const adminEnsured = await ensureAdminUserInDb();
-    await createSession(user.id, adminEnsured.org.id);
+    await ensureAdminUserInDb();
+    await createSession(user.id, null);
     redirect("/admin");
   }
 

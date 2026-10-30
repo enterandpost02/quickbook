@@ -7,6 +7,8 @@ import {
   computeReportsForFilter,
   convertEstimateToInvoice,
   createCustomer,
+  createEstimate,
+  createExpenseOrBill,
   createInvoice,
   createTransfer,
   createVendor,
@@ -38,7 +40,6 @@ import {
   normalizeDateString,
   parseCsvTextToPreview,
 } from "../csv-parser";
-import { BANK_CSV_PRESETS } from "../sample-bank-csvs";
 import {
   sendTeamInviteEmail,
   sendSignupOtpEmail,
@@ -171,12 +172,35 @@ describe("QuickBooks Double-Entry Accounting Engine & CSV Suite", () => {
     }, /Books are closed through 2026-09-30/);
   });
 
-  it("6. Parses all 4 multi-bank CSV formats (Chase, BofA split columns, Amex parens, Wells Fargo quotes) and detects duplicates", () => {
-    for (const preset of BANK_CSV_PRESETS) {
-      const preview = parseCsvTextToPreview(preset.csvContent);
+  it("6. Parses all 4 multi-bank CSV formats (single signed Amount, split Debit/Credit, parens charges, quoted commas) and detects duplicates", () => {
+    const csvFixtures = [
+      {
+        label: "Single signed Amount",
+        accountId: "acc-1000",
+        csvContent: `Date,Description,Amount,Payee\n2026-10-20,OFFICE DEPOT SUPPLIES,-248.50,Office Depot\n2026-10-21,STRIPE CLIENT PAYOUT,1450.00,Stripe\n2026-10-22,MONTHLY UTILITY BILL,-195.40,City Power`,
+      },
+      {
+        label: "Split Money Out / Money In",
+        accountId: "acc-1000",
+        csvContent: `Posted Date,Transaction Description,Money Out,Money In,Merchant\n10/20/2026,"HARDWARE SUPPLY INC.",480.00,,Hardware Supply\n10/21/2026,ACH CLIENT DEPOSIT,,1680.00,Client Corp\n10/22/2026,PAYROLL WAGES RUN,2450.00,,Payroll Co`,
+      },
+      {
+        label: "Parentheses charges",
+        accountId: "acc-2100",
+        csvContent: `Date,Memo,Amount,Vendor\n10/18/2026,CLOUD HOSTING SUBSCRIPTION,($59.99),Cloud Host\n10/19/2026,OFFICE EQUIPMENT,($412.75),Equip Co\n10/21/2026,SEARCH ADS CAMPAIGN,($350.00),Ad Network`,
+      },
+      {
+        label: "Quoted currency strings",
+        accountId: "acc-1000",
+        csvContent: `Transaction Date,Details,Total,Payee Name\n2026-10-22,COMMERCIAL DEPOSIT,"$2,150.00",Enterprise Client\n2026-10-23,INSURANCE POLICY RENEWAL,"-$425.00",Insurance Co\n2026-10-24,WHOLESALE INVENTORY,"-$1,180.50",Wholesale Partner`,
+      },
+    ];
+
+    for (const fixture of csvFixtures) {
+      const preview = parseCsvTextToPreview(fixture.csvContent);
       assert.ok(
         preview.rawRows.length >= 3,
-        `Expected rows for ${preset.bankName}`
+        `Expected rows for ${fixture.label}`
       );
 
       const mappedRows = preview.rawRows.map((r) => ({
@@ -186,7 +210,7 @@ describe("QuickBooks Double-Entry Accounting Engine & CSV Suite", () => {
       }));
 
       const firstImport = importBankCsvRows({
-        bankAccountId: preset.defaultAccountId,
+        bankAccountId: fixture.accountId,
         rows: mappedRows,
       });
       assert.equal(firstImport.importedCount, mappedRows.length);
@@ -194,7 +218,7 @@ describe("QuickBooks Double-Entry Accounting Engine & CSV Suite", () => {
 
       // Re-importing the exact same CSV should detect 100% duplicates
       const secondImport = importBankCsvRows({
-        bankAccountId: preset.defaultAccountId,
+        bankAccountId: fixture.accountId,
         rows: mappedRows,
       });
       assert.equal(secondImport.importedCount, 0);
@@ -203,12 +227,42 @@ describe("QuickBooks Double-Entry Accounting Engine & CSV Suite", () => {
   });
 
   it("7. Categorizing bank feed items, converting estimates, and transferring funds keep Balance Sheet balanced", () => {
-    categorizeBankTransaction({
-      transactionId: "btx-1",
-      categoryAccountId: "acc-5010",
-      payee: "Hicks Hardware",
+    importBankCsvRows({
+      bankAccountId: "acc-1000",
+      rows: [
+        {
+          date: "2026-10-15",
+          description: "HARDWARE STORE SUPPLIES",
+          amountCents: -31250,
+        },
+      ],
     });
-    convertEstimateToInvoice("est-2001");
+    const txId = getComputedQboState().bankTransactions[0]!.id;
+    categorizeBankTransaction({
+      transactionId: txId,
+      categoryAccountId: "acc-5010",
+      payee: "Hardware Supplier",
+    });
+
+    const cust = createCustomer({
+      name: "Horizon Enterprises",
+      email: "ap@horizon.example",
+    });
+    const est = createEstimate({
+      customerId: cust.id,
+      date: "2026-10-14",
+      expirationDate: "2026-11-14",
+      lines: [
+        {
+          serviceName: "Consulting Retainer",
+          description: "Q4 advisory package",
+          quantity: 1,
+          rateCents: 245000,
+          incomeAccountId: "acc-4000",
+        },
+      ],
+    });
+    convertEstimateToInvoice(est.id);
     createTransfer({
       fromAccountId: "acc-1000",
       toAccountId: "acc-1010",
@@ -265,6 +319,7 @@ describe("QuickBooks Double-Entry Accounting Engine & CSV Suite", () => {
   });
 
   it("10. Phase 9: Security & Accounting Integrity Audit passes 6/6 checks", () => {
+    setPeriodLockDate("2026-08-31");
     const state = getComputedQboState();
     assert.equal(state.securityAudit.allMoneyIntegerCents, true);
     assert.equal(state.securityAudit.allEntriesBalanced, true);
@@ -279,6 +334,10 @@ describe("QuickBooks Double-Entry Accounting Engine & CSV Suite", () => {
   });
 
   it("11. Automatic Sales Tax on Invoices calculates exact integer cents, credits 2200 Sales Tax Payable, and keeps books balanced", () => {
+    const cust = createCustomer({
+      name: "Apex Retail Corp",
+      email: "billing@apexretail.example",
+    });
     const before = getComputedQboState();
     const taxBefore =
       before.accountsWithBalances.find((a) => a.id === "acc-2200")
@@ -286,15 +345,15 @@ describe("QuickBooks Double-Entry Accounting Engine & CSV Suite", () => {
 
     // $1,000.00 taxable line at 8.25% => $82.50 (8250 cents) tax, $1,082.50 (108250 cents) total A/R
     const inv = createInvoice({
-      customerId: "cust-1",
+      customerId: cust.id,
       date: "2026-10-27",
       dueDate: "2026-11-26",
       applySalesTax: true,
       taxRatePercent: 8.25,
       lines: [
         {
-          serviceName: "Landscape Design & Installation",
-          description: "Taxable installation package",
+          serviceName: "Consulting & Implementation",
+          description: "Taxable implementation package",
           quantity: 1,
           rateCents: 100000,
           incomeAccountId: "acc-4000",
@@ -318,59 +377,93 @@ describe("QuickBooks Double-Entry Accounting Engine & CSV Suite", () => {
   });
 
   it("12. Bank Feed Deposit & Outflow Matching to Open Invoices and Open Bills clears A/R and A/P without double-counting", () => {
-    // Match btx-3 (+$1,250.00 deposit) as a partial payment to open Invoice inv-1002 ($3,420.00 balance due)
-    matchBankTransaction({
-      transactionId: "btx-3",
-      matchType: "invoice",
-      targetId: "inv-1002",
+    const cust = createCustomer({ name: "Summit Sporting Goods" });
+    const openInv = createInvoice({
+      customerId: cust.id,
+      date: "2026-10-10",
+      dueDate: "2026-11-09",
+      lines: [
+        {
+          serviceName: "Commercial Systems Upgrade",
+          description: "Phase 1 rollout",
+          quantity: 1,
+          rateCents: 342000,
+          incomeAccountId: "acc-4000",
+        },
+      ],
+    });
+    const vend = createVendor({ name: "Northwest Materials Inc" });
+    const openBill = createExpenseOrBill({
+      type: "Bill",
+      vendorName: vend.name,
+      date: "2026-10-12",
+      dueDate: "2026-11-11",
+      paymentAccountId: "acc-2000",
+      categoryAccountId: "acc-5010",
+      description: "Materials supply order",
+      amountCents: 112000,
+      refNumber: "NW-409",
     });
 
-    const afterPartial = getComputedQboState();
-    const partialInv = afterPartial.invoices.find((i) => i.id === "inv-1002");
-    assert.equal(partialInv?.balanceDueCents, 217000);
-    assert.equal(partialInv?.status, "Open");
-
-    // Import remaining +$2,170.00 deposit for inv-1002 and -$1,120.00 outflow for open Bill exp-3
     importBankCsvRows({
       bankAccountId: "acc-1000",
       rows: [
         {
+          date: "2026-10-17",
+          description: "PARTIAL DEPOSIT SUMMIT SPORTING",
+          amountCents: 125000,
+        },
+        {
           date: "2026-10-27",
-          description: "ACH DEPOSIT FREEMAN SPORTING GOODS INV-1002",
+          description: "REMAINING DEPOSIT SUMMIT SPORTING",
           amountCents: 217000,
         },
         {
           date: "2026-10-27",
-          description: "ACH PMT NORTON LUMBER BILL NL-409",
+          description: "ACH PMT NORTHWEST MATERIALS NW-409",
           amountCents: -112000,
         },
       ],
     });
-    const midState = getComputedQboState();
-    const invBankTx = midState.bankTransactions.find((t) =>
-      t.description.includes("FREEMAN SPORTING GOODS INV-1002")
-    );
-    const billBankTx = midState.bankTransactions.find((t) =>
-      t.description.includes("NORTON LUMBER BILL NL-409")
-    );
-    assert.ok(invBankTx);
-    assert.ok(billBankTx);
+
+    const imported = getComputedQboState().bankTransactions;
+    const partialDepositTx = imported.find((t) =>
+      t.description.includes("PARTIAL DEPOSIT")
+    )!;
+    const invBankTx = imported.find((t) =>
+      t.description.includes("REMAINING DEPOSIT")
+    )!;
+    const billBankTx = imported.find((t) =>
+      t.description.includes("NORTHWEST MATERIALS")
+    )!;
+
+    // Match +$1,250.00 deposit as a partial payment to open Invoice ($3,420.00 balance due)
+    matchBankTransaction({
+      transactionId: partialDepositTx.id,
+      matchType: "invoice",
+      targetId: openInv.id,
+    });
+
+    const afterPartial = getComputedQboState();
+    const partialInv = afterPartial.invoices.find((i) => i.id === openInv.id);
+    assert.equal(partialInv?.balanceDueCents, 217000);
+    assert.equal(partialInv?.status, "Open");
 
     matchBankTransaction({
       transactionId: invBankTx.id,
       matchType: "invoice",
-      targetId: "inv-1002",
+      targetId: openInv.id,
     });
 
     matchBankTransaction({
       transactionId: billBankTx.id,
       matchType: "bill",
-      targetId: "exp-3",
+      targetId: openBill.id,
     });
 
     const finalState = getComputedQboState();
-    const matchedInv = finalState.invoices.find((i) => i.id === "inv-1002");
-    const matchedBill = finalState.expenses.find((e) => e.id === "exp-3");
+    const matchedInv = finalState.invoices.find((i) => i.id === openInv.id);
+    const matchedBill = finalState.expenses.find((e) => e.id === openBill.id);
 
     assert.equal(matchedInv?.status, "Paid");
     assert.equal(matchedInv?.balanceDueCents, 0);
@@ -380,11 +473,43 @@ describe("QuickBooks Double-Entry Accounting Engine & CSV Suite", () => {
   });
 
   it("13. Cash Basis & Custom Date-Range Report Filtering preserve exact Balance Sheet & Trial Balance equality", () => {
+    postJournalEntry({
+      date: "2026-09-01",
+      memo: "Opening owner capital",
+      lines: [
+        { accountId: "acc-1000", debitCents: 2500000, creditCents: 0 },
+        { accountId: "acc-3100", debitCents: 0, creditCents: 2500000 },
+      ],
+    });
+    const cust = createCustomer({ name: "Pacific Crest Client" });
+    createInvoice({
+      customerId: cust.id,
+      date: "2026-10-10",
+      dueDate: "2026-11-09",
+      lines: [
+        {
+          serviceName: "Advisory Services",
+          description: "October retainer (unpaid A/R)",
+          quantity: 1,
+          rateCents: 350000,
+          incomeAccountId: "acc-4000",
+        },
+      ],
+    });
+    const vend = createVendor({ name: "Metro Office Supply" });
+    createExpenseOrBill({
+      type: "Bill",
+      vendorName: vend.name,
+      date: "2026-10-12",
+      dueDate: "2026-11-11",
+      paymentAccountId: "acc-2000",
+      categoryAccountId: "acc-6060",
+      description: "Unpaid vendor bill in A/P",
+      amountCents: 85000,
+    });
+
     const state = getComputedQboState();
 
-    // Accrual basis vs Cash basis across all dates:
-    // Seed data has unpaid invoices (A/R $8,250.00) and unpaid bill (A/P $1,850.00),
-    // so Cash Basis Net Income differs from Accrual Basis while keeping Balance Sheet balanced!
     const accrualAll = computeReportsForFilter(state, { basis: "accrual" });
     const cashAll = computeReportsForFilter(state, { basis: "cash" });
 
@@ -397,7 +522,6 @@ describe("QuickBooks Double-Entry Accounting Engine & CSV Suite", () => {
       cashAll.profitAndLoss.totalIncomeCents
     );
 
-    // Date-range filtered reports (October 2026 only, where prior Sept 2026 entries roll into Retained Earnings)
     const accrualOct = computeReportsForFilter(state, {
       basis: "accrual",
       startDate: "2026-10-01",
@@ -435,6 +559,47 @@ describe("QuickBooks Double-Entry Accounting Engine & CSV Suite", () => {
   });
 
   it("15. Bank & Credit Card Reconciliation and Dynamic Bank Balance vs QuickBooks Balance math are 100% exact", () => {
+    postJournalEntry({
+      date: "2026-10-01",
+      memo: "Initial checking capital",
+      lines: [
+        { accountId: "acc-1000", debitCents: 2805000, creditCents: 0 },
+        { accountId: "acc-3100", debitCents: 0, creditCents: 2805000 },
+      ],
+    });
+    const cardVendor = createVendor({ name: "Insurance Carrier" });
+    createExpenseOrBill({
+      type: "Expense",
+      vendorName: cardVendor.name,
+      date: "2026-10-10",
+      paymentAccountId: "acc-2100",
+      categoryAccountId: "acc-6040",
+      description: "Liability policy",
+      amountCents: 149200,
+    });
+
+    importBankCsvRows({
+      bankAccountId: "acc-1000",
+      rows: [
+        {
+          date: "2026-10-17",
+          description: "STRIPE CLIENT DEPOSIT",
+          amountCents: 56990,
+        },
+      ],
+    });
+    importBankCsvRows({
+      bankAccountId: "acc-2100",
+      rows: [
+        {
+          date: "2026-10-19",
+          description: "INTUIT CLOUD SOFTWARE SUBSCRIPTION",
+          amountCents: -9000,
+        },
+      ],
+    });
+    runAiAutoCategorizer();
+
     const initial = getComputedQboState();
     const checkingBefore = initial.accountsWithBalances.find(
       (a) => a.id === "acc-1000"
@@ -443,16 +608,12 @@ describe("QuickBooks Double-Entry Accounting Engine & CSV Suite", () => {
       (a) => a.id === "acc-2100"
     )!;
 
-    // Before categorizing pending "for_review" rows:
-    // Checking GL is $28,050.00 (2805000), pending feed is +$569.90 (+56990) => Bank Balance $28,619.90 (2861990)
     assert.equal(checkingBefore.balanceCents, 2805000);
     assert.equal(checkingBefore.bankBalanceCents, 2861990);
-
-    // Amex GL is $1,492.00 (149200), pending feed is -$90.00 (-9000 charge) => Bank Balance $1,582.00 (158200)
     assert.equal(amexBefore.balanceCents, 149200);
     assert.equal(amexBefore.bankBalanceCents, 158200);
 
-    // Categorize all suggested rows on Checking and Amex
+    // Categorize all suggested rows on Checking and Credit Card
     categorizeAllSuggested("acc-1000");
     categorizeAllSuggested("acc-2100");
 
@@ -464,7 +625,6 @@ describe("QuickBooks Double-Entry Accounting Engine & CSV Suite", () => {
       (a) => a.id === "acc-2100"
     )!;
 
-    // Now that forReviewCount === 0, Bank Balance === QuickBooks GL Balance to the exact cent!
     assert.equal(checkingAfter.forReviewCount, 0);
     assert.equal(checkingAfter.balanceCents, 2861990);
     assert.equal(checkingAfter.bankBalanceCents, 2861990);
@@ -473,7 +633,7 @@ describe("QuickBooks Double-Entry Accounting Engine & CSV Suite", () => {
     assert.equal(amexAfter.balanceCents, 158200);
     assert.equal(amexAfter.bankBalanceCents, 158200);
 
-    // Reconcile Checking (debit-normal) and Amex (credit-normal)
+    // Reconcile Checking (debit-normal) and Credit Card (credit-normal)
     const checkingEntryIds = afterCat.journalEntries
       .filter((je) => je.lines.some((l) => l.accountId === "acc-1000"))
       .map((je) => je.id);
@@ -510,6 +670,33 @@ describe("QuickBooks Double-Entry Accounting Engine & CSV Suite", () => {
   });
 
   it("16. Sub-Ledger (A/R & A/P Aging) always equals General Ledger (1100 A/R & 2000 A/P) before and after reversals", () => {
+    const cust = createCustomer({ name: "Beacon Logistics" });
+    const inv = createInvoice({
+      customerId: cust.id,
+      date: "2026-10-10",
+      dueDate: "2026-11-09",
+      lines: [
+        {
+          serviceName: "Consulting",
+          description: "Advisory services",
+          quantity: 1,
+          rateCents: 342000,
+          incomeAccountId: "acc-4000",
+        },
+      ],
+    });
+    const vend = createVendor({ name: "Atlas Industrial" });
+    const bill = createExpenseOrBill({
+      type: "Bill",
+      vendorName: vend.name,
+      date: "2026-10-12",
+      dueDate: "2026-11-11",
+      paymentAccountId: "acc-2000",
+      categoryAccountId: "acc-5010",
+      description: "Materials bill",
+      amountCents: 112000,
+    });
+
     function assertSubLedgerMatchesGL() {
       const s = getComputedQboState();
       const arGl =
@@ -526,17 +713,17 @@ describe("QuickBooks Double-Entry Accounting Engine & CSV Suite", () => {
       assert.equal(s.reports.trialBalance.isBalanced, true);
     }
 
-    // 1. Initial seed state
+    // 1. Open A/R & A/P state
     assertSubLedgerMatchesGL();
 
-    // 2. Receive payment on inv-1002 and pay bill exp-3
+    // 2. Receive payment on invoice and pay vendor bill
     receiveInvoicePayment({
-      invoiceId: "inv-1002",
+      invoiceId: inv.id,
       date: "2026-10-26",
       depositAccountId: "acc-1000",
     });
     payVendorBill({
-      expenseId: "exp-3",
+      expenseId: bill.id,
       bankAccountId: "acc-1000",
       date: "2026-10-26",
     });
@@ -545,10 +732,10 @@ describe("QuickBooks Double-Entry Accounting Engine & CSV Suite", () => {
     // 3. Reverse both the invoice payment and the bill payment -> A/R and A/P re-open cleanly
     const mid = getComputedQboState();
     const invPmtJeId = mid.invoices.find(
-      (i) => i.id === "inv-1002"
+      (i) => i.id === inv.id
     )?.paymentJournalEntryId;
     const billPmtJeId = mid.expenses.find(
-      (e) => e.id === "exp-3"
+      (e) => e.id === bill.id
     )?.paymentJournalEntryId;
     assert.ok(invPmtJeId);
     assert.ok(billPmtJeId);
@@ -675,26 +862,33 @@ describe("QuickBooks Double-Entry Accounting Engine & CSV Suite", () => {
     assert.equal(parseSearchAmountCents("90.50"), 9050);
     assert.equal(parseSearchAmountCents("invalid-dollar"), null);
 
-    // 4. Global Search engine indexing
+    // 4. Create an invoice for $1,250.00 and test Global Search engine indexing
+    const createdInv = createInvoice({
+      customerId: cust.id,
+      date: "2026-10-20",
+      dueDate: "2026-11-19",
+      lines: [
+        {
+          serviceName: "Architectural Retainer",
+          description: "Phase 1 schematic design",
+          quantity: 1,
+          rateCents: 125000,
+          incomeAccountId: "acc-4000",
+        },
+      ],
+    });
+
     const state = getComputedQboState();
 
     // Query by exact invoice number
-    const invRes = searchQboState(state, "INV-1001");
+    const invRes = searchQboState(state, `INV-${createdInv.invoiceNumber}`);
     assert.ok(invRes.length > 0);
     assert.equal(invRes[0].kind, "invoice");
-    assert.ok(invRes[0].title.includes("1001"));
-
-    // Query by customer name
-    const custRes = searchQboState(state, "Amy");
-    assert.ok(custRes.some((r) => r.kind === "customer" && r.title.includes("Amy")));
+    assert.ok(invRes[0].title.includes(createdInv.invoiceNumber));
 
     // Query by created customer name
     const eleanorRes = searchQboState(state, "Eleanor");
     assert.ok(eleanorRes.some((r) => r.kind === "customer" && r.title.includes("Eleanor Vance")));
-
-    // Query by vendor name
-    const venRes = searchQboState(state, "Tania");
-    assert.ok(venRes.some((r) => r.kind === "vendor" && r.title.includes("Tania")));
 
     // Query by created vendor name
     const apexRes = searchQboState(state, "Apex");
@@ -709,14 +903,40 @@ describe("QuickBooks Double-Entry Accounting Engine & CSV Suite", () => {
     assert.ok(amtRes.some((r) => r.amountCents === 125000));
   });
 
-  it("19. Wipe All Sample Data resets company to fresh $0.00 books with balanced ledger", () => {
-    // 1. Verify initially we have transactions
+  it("19. Clean $0.00 ledger reset clears posted transactions and preserves balanced 31-account Chart of Accounts", () => {
+    const cust = createCustomer({ name: "Test Client" });
+    createInvoice({
+      customerId: cust.id,
+      date: "2026-10-20",
+      dueDate: "2026-11-19",
+      lines: [
+        {
+          serviceName: "Service",
+          description: "Billable work",
+          quantity: 1,
+          rateCents: 50000,
+          incomeAccountId: "acc-4000",
+        },
+      ],
+    });
+    const vend = createVendor({ name: "Test Supplier" });
+    createExpenseOrBill({
+      type: "Expense",
+      vendorName: vend.name,
+      date: "2026-10-21",
+      paymentAccountId: "acc-1000",
+      categoryAccountId: "acc-6060",
+      description: "Office supplies",
+      amountCents: 12000,
+    });
+
+    // 1. Verify we have transactions after posting
     const before = getComputedQboState();
     assert.ok(before.journalEntries.length > 0);
     assert.ok(before.invoices.length > 0);
     assert.ok(before.expenses.length > 0);
 
-    // 2. Wipe all sample transactions
+    // 2. Reset all transactions
     wipeAllCompanyTransactions();
 
     // 3. Verify clean $0.00 state
@@ -736,12 +956,14 @@ describe("QuickBooks Double-Entry Accounting Engine & CSV Suite", () => {
     assert.equal(after.reports.balanceSheet.isBalanced, true);
     assert.equal(after.reports.trialBalance.isBalanced, true);
 
-    // 4. Verify createFreshCompanyData also generates fresh $0.00 company
+    // 4. Verify createFreshCompanyData generates clean $0.00 company with 0 products & 0 rules
     const fresh = createFreshCompanyData("Acme Corp LLC");
     assert.equal(fresh.companyName, "Acme Corp LLC");
     assert.equal(fresh.journalEntries.length, 0);
     assert.equal(fresh.invoices.length, 0);
     assert.equal(fresh.expenses.length, 0);
+    assert.equal(fresh.productsAndServices.length, 0);
+    assert.equal(fresh.rules.length, 0);
     assert.equal(fresh.accounts.length, 31);
   });
 
@@ -936,7 +1158,6 @@ describe("QuickBooks Double-Entry Accounting Engine & CSV Suite", () => {
           name: verified.user.fullName,
           email: verified.user.email,
         },
-        template: "empty",
       });
 
       const { state } = await loadQboStoreFromDb(verified.organization.id, {
@@ -1141,16 +1362,17 @@ describe("QuickBooks Double-Entry Accounting Engine & CSV Suite", () => {
         "Alpha Logistics Corp"
       );
 
-      // 2. Godfather Super Admin session governs platform tenants/users via /admin overview (zero customer ledger memberships)
+      // 2. Godfather Super Admin session works with null activeOrganizationId (0 dummy companies required)
       const godfatherSession = await createSessionRecordInDb(
         godfather.user.id,
-        tenantA.organizationId
+        null
       );
       const godfatherAuth = await resolveAuthFromRawToken(
         godfatherSession.rawToken
       );
       assert.ok(godfatherAuth);
       assert.equal(godfatherAuth.isSuperAdmin, true);
+      assert.equal(godfatherAuth.organization, null);
       assert.equal(godfatherAuth.memberships.length, 0);
 
       const overview = await getPlatformAdminOverview();

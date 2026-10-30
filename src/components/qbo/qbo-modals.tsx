@@ -5,7 +5,6 @@ import {
   ArrowLeftRight,
   CheckCircle2,
   ClipboardList,
-  Download,
   FileSpreadsheet,
   FileText,
   Landmark,
@@ -13,7 +12,6 @@ import {
   Plus,
   Receipt,
   Scale,
-  Sparkles,
   Trash2,
   Upload,
   X,
@@ -26,7 +24,6 @@ import {
   parseCsvTextToPreview,
   type ParsedCsvPreview,
 } from "@/lib/csv-parser";
-import { BANK_CSV_PRESETS } from "@/lib/sample-bank-csvs";
 
 export type ActiveModalType =
   | null
@@ -359,21 +356,10 @@ function CsvImportModal({
     reader.readAsText(file);
   }
 
-  function downloadSampleCsv(presetId: string) {
-    const preset =
-      BANK_CSV_PRESETS.find((p) => p.id === presetId) ?? BANK_CSV_PRESETS[0];
-    const blob = new Blob([preset.csvContent], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${preset.id}-statement.csv`;
-    a.click();
-  }
-
   async function handleImportSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!preview || preview.rawRows.length === 0) {
-      setError("Please upload a CSV file or select one of the 4 bank presets.");
+      setError("Please upload a bank statement .CSV file or paste CSV rows below.");
       return;
     }
 
@@ -461,7 +447,7 @@ function CsvImportModal({
 
           <div>
             <label className="block text-xs font-semibold uppercase text-slate-600 mb-1.5">
-              Upload .CSV from Computer
+              2. Upload Bank Statement .CSV from Computer
             </label>
             <div className="flex items-center gap-2">
               <label className="flex-1 cursor-pointer inline-flex items-center justify-center gap-2 rounded-lg border border-dashed border-[#2CA01C] bg-emerald-50/50 px-3 py-2 text-xs font-bold text-[#2CA01C] hover:bg-emerald-50">
@@ -474,46 +460,7 @@ function CsvImportModal({
                   className="hidden"
                 />
               </label>
-              <button
-                type="button"
-                onClick={() => downloadSampleCsv("chase-checking")}
-                title="Download sample .csv file to test uploading from your computer"
-                className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-              >
-                <Download className="h-3.5 w-3.5" />
-                Sample .CSV
-              </button>
             </div>
-          </div>
-        </div>
-
-        {/* 4 Real Bank Format Presets */}
-        <div>
-          <label className="block text-xs font-semibold uppercase text-slate-600 mb-1.5">
-            2. Or Test One of 4 Real Bank Export Formats Instantly
-          </label>
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
-            {BANK_CSV_PRESETS.map((preset) => (
-              <button
-                key={preset.id}
-                type="button"
-                onClick={() => {
-                  setBankAccountId(preset.defaultAccountId);
-                  handleTextChange(preset.csvContent);
-                }}
-                className="text-left rounded-lg border border-slate-200 bg-slate-50 p-2.5 hover:border-[#2CA01C] hover:bg-emerald-50/40 transition-colors"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-900">
-                    {preset.bankName}
-                  </span>
-                  <Sparkles className="h-3 w-3 text-[#2CA01C]" />
-                </div>
-                <p className="text-[10px] text-slate-500 mt-0.5 line-clamp-2">
-                  {preset.formatDescription}
-                </p>
-              </button>
-            ))}
           </div>
         </div>
 

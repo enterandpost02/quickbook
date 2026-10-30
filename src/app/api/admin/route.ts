@@ -66,7 +66,6 @@ export async function POST(request: Request) {
           ownerName: String(payload.ownerName ?? ""),
           ownerEmail: String(payload.ownerEmail ?? ""),
           ownerPassword: String(payload.ownerPassword ?? ""),
-          template: payload.template === "sample" ? "sample" : "empty",
         });
         break;
       }

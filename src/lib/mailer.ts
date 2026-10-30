@@ -46,18 +46,25 @@ export interface SendOtpEmailResult {
   error?: string;
 }
 
+function stripSurroundingQuotes(val?: string): string | undefined {
+  return val?.trim().replace(/^["']|["']$/g, "");
+}
+
 function getSmtpConfig() {
   const fromEmail =
-    process.env.GMAIL_USER ||
-    process.env.SMTP_USER ||
+    stripSurroundingQuotes(process.env.GMAIL_USER) ||
+    stripSurroundingQuotes(process.env.SMTP_USER) ||
     DEFAULT_SENDER_EMAIL;
   const fromHeader = `"${DEFAULT_SENDER_NAME}" <${fromEmail}>`;
   const rawPass =
-    process.env.GMAIL_APP_PASSWORD ||
-    process.env.SMTP_PASS ||
-    process.env.EMAIL_PASSWORD;
-  const smtpHost = process.env.SMTP_HOST || "smtp.gmail.com";
-  const smtpPort = Number(process.env.SMTP_PORT || 465);
+    stripSurroundingQuotes(process.env.GMAIL_APP_PASSWORD) ||
+    stripSurroundingQuotes(process.env.SMTP_PASS) ||
+    stripSurroundingQuotes(process.env.EMAIL_PASSWORD);
+  const smtpHost =
+    stripSurroundingQuotes(process.env.SMTP_HOST) || "smtp.gmail.com";
+  const smtpPort = Number(
+    stripSurroundingQuotes(process.env.SMTP_PORT) || 465
+  );
   const smtpPass =
     rawPass && smtpHost.includes("gmail.com")
       ? rawPass.replace(/\s+/g, "")
@@ -218,10 +225,15 @@ export async function sendTeamInviteEmail(
   const subject = `You've been invited to join ${params.companyName} on Pro E Books`;
   const roleInfo = getRoleDescription(params.role);
 
-  const baseUrl =
+  const baseUrl = (
     params.appUrl ||
-    process.env.NEXT_PUBLIC_APP_URL ||
-    "http://localhost:3000";
+    stripSurroundingQuotes(process.env.NEXT_PUBLIC_APP_URL) ||
+    (process.env.VERCEL_PROJECT_PRODUCTION_URL
+      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+      : process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
+      : "http://localhost:3000")
+  ).replace(/\/+$/, "");
 
   const inviterDisplay = params.inviterName || "Your Company Owner";
   const inviterContact = params.inviterEmail || fromEmail;

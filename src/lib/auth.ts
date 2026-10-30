@@ -91,12 +91,11 @@ export function slugifyOrganizationName(name: string): string {
 
 /**
  * Ensures the Platform Super Admin (`enterandpost02@gmail.com`) exists in `users`
- * with `isSuperAdmin = true`. Also guarantees at least one fallback workspace organization
- * exists so `sessions.active_organization_id` always has a valid FK target.
+ * with `isSuperAdmin = true` and is detached from any customer tenant memberships.
+ * Never creates any dummy or sample organizations.
  */
 export async function ensureAdminUserInDb(): Promise<{
   user: User;
-  org: Organization;
 }> {
   const db = await getDb();
   const email = DEFAULT_ADMIN.email.toLowerCase();
@@ -130,7 +129,7 @@ export async function ensureAdminUserInDb(): Promise<{
       adminUser.isSuspended ||
       !adminUser.emailVerified ||
       needsPassUpdate ||
-      adminUser.fullName === "Craig Carlson"
+      adminUser.fullName !== fullName
     ) {
       const [updated] = await db
         .update(users)
@@ -152,31 +151,12 @@ export async function ensureAdminUserInDb(): Promise<{
     .delete(organizationMembers)
     .where(eq(organizationMembers.userId, adminUser.id));
 
-  let [primaryOrg] = await db
-    .select()
-    .from(organizations)
-    .orderBy(asc(organizations.createdAt))
-    .limit(1);
-
-  if (!primaryOrg) {
-    const [newOrg] = await db
-      .insert(organizations)
-      .values({
-        name: "Demo Sandbox Company",
-        slug: slugifyOrganizationName("Demo Sandbox Company"),
-        baseCurrency: "USD",
-        planStatus: "active",
-      })
-      .returning();
-    primaryOrg = newOrg;
-  }
-
-  return { user: adminUser, org: primaryOrg };
+  return { user: adminUser };
 }
 
 export async function createSessionRecordInDb(
   userId: string,
-  organizationId: string
+  organizationId?: string | null
 ): Promise<{ rawToken: string; expiresAt: Date }> {
   const db = await getDb();
   const rawToken = crypto.randomBytes(32).toString("hex");
@@ -188,7 +168,7 @@ export async function createSessionRecordInDb(
   await db.insert(sessions).values({
     tokenHash,
     userId,
-    activeOrganizationId: organizationId,
+    activeOrganizationId: organizationId ?? null,
     expiresAt,
   });
 
@@ -197,11 +177,11 @@ export async function createSessionRecordInDb(
 
 export async function createSession(
   userId: string,
-  organizationId: string
+  organizationId?: string | null
 ): Promise<string> {
   const { rawToken, expiresAt } = await createSessionRecordInDb(
     userId,
-    organizationId
+    organizationId ?? null
   );
 
   const cookieStore = await cookies();
@@ -212,12 +192,16 @@ export async function createSession(
     path: "/",
     expires: expiresAt,
   });
-  cookieStore.set(ACTIVE_ORG_COOKIE_NAME, organizationId, {
-    httpOnly: false,
-    sameSite: "lax",
-    path: "/",
-    expires: expiresAt,
-  });
+  if (organizationId) {
+    cookieStore.set(ACTIVE_ORG_COOKIE_NAME, organizationId, {
+      httpOnly: false,
+      sameSite: "lax",
+      path: "/",
+      expires: expiresAt,
+    });
+  } else {
+    cookieStore.delete(ACTIVE_ORG_COOKIE_NAME);
+  }
 
   return rawToken;
 }
@@ -238,7 +222,7 @@ export async function destroyCurrentSession(): Promise<void> {
   }
 }
 
-export interface AuthContext {
+type BaseAuthContext = {
   sessionId: string;
   user: Pick<
     User,
@@ -250,14 +234,22 @@ export interface AuthContext {
     | "isSuspended"
     | "createdAt"
   >;
-  isSuperAdmin: boolean;
-  organization: Organization;
   role: OrganizationRole;
   memberships: Array<{
     organization: Organization;
     role: OrganizationRole;
   }>;
-}
+};
+
+export type AuthContext =
+  | (BaseAuthContext & {
+      isSuperAdmin: true;
+      organization: Organization | null;
+    })
+  | (BaseAuthContext & {
+      isSuperAdmin: false;
+      organization: Organization;
+    });
 
 export async function resolveAuthFromRawToken(
   rawToken: string
@@ -276,7 +268,7 @@ export async function resolveAuthFromRawToken(
     })
     .from(sessions)
     .innerJoin(users, eq(sessions.userId, users.id))
-    .innerJoin(
+    .leftJoin(
       organizations,
       eq(sessions.activeOrganizationId, organizations.id)
     )
@@ -307,7 +299,7 @@ export async function resolveAuthFromRawToken(
         createdAt: row.user.createdAt,
       },
       isSuperAdmin: true,
-      organization: row.organization,
+      organization: row.organization ?? null,
       role: "owner",
       // Super Admin governs tenants & users via /admin only and does not open customer ledgers/workspaces
       memberships: [],
@@ -335,11 +327,13 @@ export async function resolveAuthFromRawToken(
     return null;
   }
 
-  let activeMembership = activeOrgMemberships.find(
-    (m) => m.organization.id === row.organization.id
-  );
+  let activeMembership = row.organization
+    ? activeOrgMemberships.find(
+        (m) => m.organization.id === row.organization!.id
+      )
+    : undefined;
 
-  // If current session org was suspended or revoked, fall back to user's first valid membership
+  // If current session org was null, suspended, or revoked, fall back to user's first valid membership
   if (!activeMembership) {
     activeMembership = activeOrgMemberships[0];
     await db

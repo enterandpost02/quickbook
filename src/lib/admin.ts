@@ -266,31 +266,10 @@ export async function adminDeleteOrganization(
   organizationId: string
 ): Promise<void> {
   const db = await getDb();
-  const allOrgs = await db.select().from(organizations);
-
-  // If deleting the last organization, ensure a fresh sandbox org remains so FK sessions stay valid
-  if (allOrgs.length <= 1) {
-    const [replacement] = await db
-      .insert(organizations)
-      .values({
-        name: "Platform Sandbox Workspace",
-        slug: slugifyOrganizationName("Platform Sandbox"),
-        baseCurrency: "USD",
-        planStatus: "active",
-      })
-      .returning();
-
-    await db
-      .update(sessions)
-      .set({ activeOrganizationId: replacement.id })
-      .where(eq(sessions.activeOrganizationId, organizationId));
-  } else {
-    const fallbackOrg = allOrgs.find((o) => o.id !== organizationId)!;
-    await db
-      .update(sessions)
-      .set({ activeOrganizationId: fallbackOrg.id })
-      .where(eq(sessions.activeOrganizationId, organizationId));
-  }
+  await db
+    .update(sessions)
+    .set({ activeOrganizationId: null })
+    .where(eq(sessions.activeOrganizationId, organizationId));
 
   await db.delete(organizations).where(eq(organizations.id, organizationId));
   evictOrganizationFromCache(organizationId);
@@ -302,7 +281,6 @@ export async function adminCreateOrganizationAndOwner(input: {
   ownerName: string;
   ownerEmail: string;
   ownerPassword: string;
-  template?: "empty" | "sample";
 }): Promise<{ organizationId: string; userId: string }> {
   const orgName = input.organizationName.trim();
   const ownerName = input.ownerName.trim();
@@ -377,7 +355,6 @@ export async function adminCreateOrganizationAndOwner(input: {
       name: created.user.fullName,
       email: created.user.email,
     },
-    template: input.template ?? "empty",
   });
 
   return { organizationId: created.org.id, userId: created.user.id };

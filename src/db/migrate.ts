@@ -5,7 +5,6 @@ dotenv.config({ path: path.join(process.cwd(), ".env.local") });
 dotenv.config({ path: path.join(process.cwd(), ".env") });
 
 import { runMigrations } from "./index";
-import { loadQboStoreFromDb } from "../lib/qbo-db";
 import { ensureAdminUserInDb } from "../lib/auth";
 
 async function main() {
@@ -13,15 +12,9 @@ async function main() {
   await runMigrations();
   console.log("Migrations applied successfully.");
 
-  console.log("Ensuring admin user (enterandpost02@gmail.com) in PostgreSQL...");
+  console.log("Ensuring Platform Super Admin (enterandpost02@gmail.com) in PostgreSQL...");
   const adminResult = await ensureAdminUserInDb();
-  console.log(`Admin user verified: ${adminResult.user.email} (${adminResult.user.fullName})`);
-
-  console.log("Seeding / verifying QuickBooks sample company in PostgreSQL...");
-  const { organizationId, storageMode, state } = await loadQboStoreFromDb();
-  console.log(
-    `Connected (${storageMode}) — Organization ID: ${organizationId} (${state.companyName}) with ${state.accounts.length} accounts and ${state.journalEntries.length} journal entries.`
-  );
+  console.log(`Super Admin verified: ${adminResult.user.email} (${adminResult.user.fullName})`);
   process.exit(0);
 }
 
